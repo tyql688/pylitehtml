@@ -2,6 +2,7 @@
 #include "image_cache.h"
 #include <cairo.h>
 #include <webp/decode.h>
+#include <cstdio>   // FILE — required before jpeglib.h
 #include <jpeglib.h>
 #include <csetjmp>
 #include <filesystem>

@@ -1,5 +1,6 @@
 // src/cpp/encode.cpp
 #include "encode.h"
+#include <cstdio>   // FILE — required before jpeglib.h
 #include <jpeglib.h>
 #include <csetjmp>
 #include <stdexcept>
