@@ -51,33 +51,37 @@ public:
 
     py::object render(const std::string& html, const std::string& base_url,
                       int height, OutputFormat fmt, int quality) {
-        // Stack-local — thread safe. Each call is fully independent.
-        PyContainer container(fm_, ic_, width_);
-        try {
-            container.render(html, base_url, height);
-        } catch (const std::exception& e) {
-            throw RenderError(e.what());
-        }
-        cairo_surface_t* surf = container.surface();
-        switch (fmt) {
-            case OutputFormat::PNG: {
-                auto buf = encode::to_png(surf);
-                return py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+        // Release the GIL only for the CPU-heavy rendering work.
+        // py::bytes / py::cast must be constructed while holding the GIL.
+        std::vector<uint8_t> buf;
+        int surf_w = 0, surf_h = 0;
+        {
+            py::gil_scoped_release release;
+            PyContainer container(fm_, ic_, width_);
+            try {
+                container.render(html, base_url, height);
+            } catch (const std::exception& e) {
+                throw RenderError(e.what());
             }
-            case OutputFormat::JPEG: {
-                auto buf = encode::to_jpeg(surf, quality);
-                return py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
-            }
-            case OutputFormat::RAW: {
-                auto buf = encode::to_rgba(surf);
-                RawResult r;
-                r.data   = py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
-                r.width  = cairo_image_surface_get_width(surf);
-                r.height = cairo_image_surface_get_height(surf);
-                return py::cast(std::move(r));
+            cairo_surface_t* surf = container.surface();
+            surf_w = cairo_image_surface_get_width(surf);
+            surf_h = cairo_image_surface_get_height(surf);
+            switch (fmt) {
+                case OutputFormat::PNG:  buf = encode::to_png(surf);           break;
+                case OutputFormat::JPEG: buf = encode::to_jpeg(surf, quality); break;
+                case OutputFormat::RAW:  buf = encode::to_rgba(surf);          break;
             }
         }
-        throw RenderError("Unknown output format");
+        // GIL re-acquired here — safe to construct Python objects
+        auto pybytes = py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+        if (fmt == OutputFormat::RAW) {
+            RawResult r;
+            r.data   = std::move(pybytes);
+            r.width  = surf_w;
+            r.height = surf_h;
+            return py::cast(std::move(r));
+        }
+        return pybytes;
     }
 
 private:
@@ -119,8 +123,7 @@ PYBIND11_MODULE(_core, m) {
              py::arg("base_url") = "",
              py::arg("height")   = 0,
              py::arg("fmt")      = OutputFormat::PNG,
-             py::arg("quality")  = 85,
-             py::call_guard<py::gil_scoped_release>());
+             py::arg("quality")  = 85);
 
     // Note: this convenience function constructs a full Renderer (including
     // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
