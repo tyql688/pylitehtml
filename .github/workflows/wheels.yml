@@ -18,7 +18,7 @@ jobs:
 
       - uses: lukka/run-vcpkg@v11
         if: runner.os != 'Linux'
-        with: { vcpkgGitCommitId: "2024.11.16" }
+        with: { vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c" }  # 2024.11.16
 
       - name: vcpkg deps (Windows)
         if: runner.os == 'Windows'

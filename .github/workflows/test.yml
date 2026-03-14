@@ -51,7 +51,7 @@ jobs:
 
       - uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: "2024.11.16"
+          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"  # 2024.11.16
           runVcpkgInstall: true
           vcpkgJsonGlob: "**/vcpkg.json"
           vcpkgDirectory: "${{ runner.workspace }}/b/vcpkg"
