@@ -10,8 +10,12 @@ if sys.platform == "win32":
         os.add_dll_directory(_dll_dir)
     # 2. Explicit override via env var (CI editable installs with vcpkg)
     for _p in os.environ.get("PYLITEHTML_DLL_PATH", "").split(os.pathsep):
-        if _p and os.path.isdir(_p):
-            os.add_dll_directory(_p)
+        _p = _p.strip()
+        if _p:
+            try:
+                os.add_dll_directory(os.path.normpath(_p))
+            except OSError:
+                pass
 
 from ._core import (
     OutputFormat, RawResult, RenderError, ImageFetchError, Renderer,
