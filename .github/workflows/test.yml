@@ -42,6 +42,7 @@ jobs:
 
       - name: Cache vcpkg packages
         uses: actions/cache@v4
+        id: vcpkg-cache
         with:
           path: |
             C:\vcpkg\installed\x64-windows
@@ -59,6 +60,7 @@ jobs:
           Add-Content $env:GITHUB_PATH "$installed\tools\pkgconf"
           Add-Content $env:GITHUB_PATH "$installed\bin"
           Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$installed\lib\pkgconfig"
+          Add-Content $env:GITHUB_ENV "PYLITEHTML_DLL_PATH=$installed\bin"
           $toolchain = "$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
           Add-Content $env:GITHUB_ENV "SKBUILD_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$toolchain"
         shell: pwsh
