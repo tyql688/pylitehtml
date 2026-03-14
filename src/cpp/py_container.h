@@ -34,7 +34,6 @@ public:
     int render(const std::string& html, const std::string& base_url, int fixed_height);
 
     cairo_surface_t* surface() const { return surface_; }
-    int rendered_height() const { return rendered_height_; }
 
     // ── Required overrides for font management ───────────────────────────────
     litehtml::uint_ptr create_font(const litehtml::font_description& descr,

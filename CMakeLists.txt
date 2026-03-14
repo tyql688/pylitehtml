@@ -50,8 +50,6 @@ target_include_directories(_core PRIVATE
   third_party/litehtml/containers/cairo
 )
 
-target_compile_options(_core PRIVATE -UCPPHTTPLIB_OPENSSL_SUPPORT)
-
 # Use IMPORTED_TARGET from pkg_check_modules — carries both include dirs AND cflags
 target_link_libraries(_core PRIVATE
   litehtml

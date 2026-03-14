@@ -25,7 +25,6 @@ public:
 
     const std::string& default_font() const { return cfg_.default_font; }
     int default_font_size_px() const { return cfg_.default_font_size; }
-    PangoFontMap* font_map() const { return font_map_; }
 
 private:
     Config cfg_;
