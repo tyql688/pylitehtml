@@ -1,0 +1,32 @@
+name: Test
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}" }
+
+      - name: System deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev \
+            libwebp-dev libjpeg-turbo8-dev cmake ninja-build
+
+      - name: System deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cairo pango fontconfig webp jpeg-turbo cmake ninja
+
+      - name: Build and test
+        run: |
+          pip install scikit-build-core pybind11 pytest pillow
+          pip install -e . --no-build-isolation
+          pytest tests/ -v
