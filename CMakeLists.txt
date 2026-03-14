@@ -39,6 +39,7 @@ pybind11_add_module(_core
   # Reuse Cairo drawing helpers from litehtml (no GDK dependency)
   third_party/litehtml/containers/cairo/container_cairo.cpp
   third_party/litehtml/containers/cairo/cairo_borders.cpp
+  third_party/litehtml/containers/cairo/conic_gradient.cpp
 )
 
 target_include_directories(_core PRIVATE
@@ -47,6 +48,8 @@ target_include_directories(_core PRIVATE
   third_party/litehtml/include
   third_party/litehtml/containers/cairo
 )
+
+target_compile_options(_core PRIVATE -UCPPHTTPLIB_OPENSSL_SUPPORT)
 
 # Use IMPORTED_TARGET from pkg_check_modules — carries both include dirs AND cflags
 target_link_libraries(_core PRIVATE

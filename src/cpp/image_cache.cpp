@@ -12,7 +12,7 @@
 #include <chrono>
 #include <vector>
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT 0
+#undef CPPHTTPLIB_OPENSSL_SUPPORT
 #include "vendor/httplib.h"
 
 namespace fs = std::filesystem;
