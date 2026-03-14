@@ -35,6 +35,9 @@ jobs:
     runs-on: windows-latest
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+      # Static-MD: vcpkg libs linked statically; CRT stays dynamic (required for Python ext).
+      # This eliminates all DLL-loading issues at test time.
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
     steps:
       - uses: actions/checkout@v6
         with: { submodules: recursive }
@@ -58,31 +61,13 @@ jobs:
 
       - name: Configure build environment
         run: |
-          $vcpkg    = Join-Path "${{ runner.workspace }}" "b\vcpkg"
-          $installed = Join-Path $vcpkg "installed\x64-windows"
-          $bin      = Join-Path $installed "bin"
-          $pkgconf  = Join-Path $installed "tools\pkgconf"
+          $vcpkg     = Join-Path "${{ runner.workspace }}" "b\vcpkg"
+          $installed = Join-Path $vcpkg "installed\x64-windows-static-md"
+          $pkgconf   = Join-Path $installed "tools\pkgconf"
           $toolchain = Join-Path $vcpkg "scripts\buildsystems\vcpkg.cmake"
           Add-Content $env:GITHUB_PATH $pkgconf
-          Add-Content $env:GITHUB_PATH $bin
           Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
-          Add-Content $env:GITHUB_ENV "PYLITEHTML_DLL_PATH=$bin"
           Add-Content $env:GITHUB_ENV "SKBUILD_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$toolchain"
-        shell: pwsh
-
-      - name: Verify DLL directory
-        run: |
-          $bin = $env:PYLITEHTML_DLL_PATH
-          Write-Host "PYLITEHTML_DLL_PATH: $bin"
-          if (Test-Path $bin) {
-            Write-Host "OK - directory exists"
-            Get-ChildItem $bin -Filter "cairo*" | ForEach-Object { Write-Host "  $($_.Name)" }
-          } else {
-            Write-Host "ERROR - directory not found!"
-            $installed = Split-Path $bin
-            Write-Host "Listing installed dir: $(Split-Path $bin -Parent)"
-            Get-ChildItem (Split-Path $bin -Parent) -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
-          }
         shell: pwsh
 
       - name: Build and test
