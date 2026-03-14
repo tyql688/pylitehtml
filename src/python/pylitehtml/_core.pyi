@@ -18,7 +18,6 @@ class Renderer:
     def __init__(
         self,
         width: int,
-        dpi: int = 96,
         default_font: str = "Noto Sans",
         default_font_size: int = 16,
         extra_fonts: list[str] = ...,

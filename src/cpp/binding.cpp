@@ -31,7 +31,8 @@ struct ImageFetchError: std::runtime_error { using runtime_error::runtime_error;
 
 class Renderer {
 public:
-    Renderer(int width, int dpi, std::string default_font, int default_font_size,
+    // DPI is fixed at 96 for v1. High-DPI rendering is not yet supported.
+    Renderer(int width, std::string default_font, int default_font_size,
              std::vector<std::string> extra_fonts,
              size_t image_cache_max_bytes, int image_timeout_ms,
              size_t image_max_bytes, bool allow_http_images)
@@ -103,10 +104,9 @@ PYBIND11_MODULE(_core, m) {
         .def_readonly("height", &RawResult::height);
 
     py::class_<Renderer>(m, "Renderer")
-        .def(py::init<int,int,std::string,int,std::vector<std::string>,
+        .def(py::init<int,std::string,int,std::vector<std::string>,
                       size_t,int,size_t,bool>(),
              py::arg("width"),
-             py::arg("dpi")                   = 96,
              py::arg("default_font")          = "Noto Sans",
              py::arg("default_font_size")     = 16,
              py::arg("extra_fonts")           = std::vector<std::string>{},
@@ -122,10 +122,13 @@ PYBIND11_MODULE(_core, m) {
              py::arg("quality")  = 85,
              py::call_guard<py::gil_scoped_release>());
 
+    // Note: this convenience function constructs a full Renderer (including
+    // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
+    // use the Renderer class directly.
     m.def("render",
         [](const std::string& html, int width, const std::string& base_url,
            int height, OutputFormat fmt, int quality) -> py::object {
-            Renderer r(width,96,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,true);
+            Renderer r(width,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,true);
             return r.render(html, base_url, height, fmt, quality);
         },
         py::arg("html"), py::arg("width"),

@@ -6,7 +6,12 @@
 
 namespace fs = std::filesystem;
 
+std::atomic<bool> FontManager::instance_exists_{false};
+
 FontManager::FontManager(Config cfg) : cfg_(std::move(cfg)) {
+    if (instance_exists_.exchange(true))
+        throw std::runtime_error("Only one FontManager may exist at a time (FcConfigSetCurrent is global)");
+
     // ── Step 1: create a fresh fontconfig config ──────────────────────────────
     fc_config_ = FcConfigCreate();
     if (!fc_config_) throw std::runtime_error("FcConfigCreate failed");
@@ -42,11 +47,17 @@ FontManager::FontManager(Config cfg) : cfg_(std::move(cfg)) {
 
     // ── Step 8: init Pango using the now-active fontconfig ────────────────────
     font_map_ = pango_cairo_font_map_new();
-    if (!font_map_) throw std::runtime_error("pango_cairo_font_map_new failed");
+    if (!font_map_) {
+        FcConfigDestroy(fc_config_);
+        fc_config_ = nullptr;
+        instance_exists_.store(false);
+        throw std::runtime_error("pango_cairo_font_map_new failed");
+    }
 }
 
 FontManager::~FontManager() {
     if (font_map_) g_object_unref(font_map_);
     // Note: do NOT call FcConfigDestroy on the current config while Pango is alive.
     // Pango holds a reference; let it be destroyed when Pango is cleaned up.
+    instance_exists_.store(false);
 }

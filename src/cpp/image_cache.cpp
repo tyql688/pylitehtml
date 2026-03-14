@@ -76,11 +76,11 @@ std::string ImageCache::resolve(const std::string& url, const std::string& base_
     if (url.empty()) return {};
     if (url.find("://") != std::string::npos) return url;
     if (url[0] == '/') return "file://" + url;
-    if (base_url.substr(0, 7) == "file://") {
+    if (base_url.rfind("file://", 0) == 0) {
         fs::path base = fs::path(base_url.substr(7)).parent_path();
         return "file://" + (base / url).string();
     }
-    if (base_url.substr(0, 7) == "http://" || base_url.substr(0, 8) == "https://") {
+    if (base_url.rfind("http://", 0) == 0 || base_url.rfind("https://", 0) == 0) {
         auto slash = base_url.rfind('/');
         return base_url.substr(0, slash + 1) + url;
     }
@@ -88,9 +88,9 @@ std::string ImageCache::resolve(const std::string& url, const std::string& base_
 }
 
 cairo_surface_t* ImageCache::load(const std::string& resolved) {
-    if (resolved.substr(0, 7) == "file://") return load_file(resolved.substr(7));
+    if (resolved.rfind("file://", 0) == 0) return load_file(resolved.substr(7));
     if (cfg_.allow_http &&
-        (resolved.substr(0, 7) == "http://" || resolved.substr(0, 8) == "https://"))
+        (resolved.rfind("http://", 0) == 0 || resolved.rfind("https://", 0) == 0))
         return load_http(resolved);
     return nullptr;
 }
@@ -199,7 +199,7 @@ cairo_surface_t* ImageCache::load_webp_file(const std::string& path) {
 }
 
 cairo_surface_t* ImageCache::load_http(const std::string& url) {
-    bool https = url.substr(0, 8) == "https://";
+    bool https = url.rfind("https://", 0) == 0;
     std::string rest = url.substr(https ? 8 : 7);
     auto slash = rest.find('/');
     std::string host = rest.substr(0, slash);
@@ -215,16 +215,22 @@ cairo_surface_t* ImageCache::load_http(const std::string& url) {
     if (!res || res->status != 200) return nullptr;
     if (res->body.size() > cfg_.max_image_bytes) return nullptr;
 
+    // RAII wrapper ensures temp file is removed on return or throw
+    struct TempFile {
+        std::string path;
+        ~TempFile() { if (!path.empty()) fs::remove(path); }
+    };
+
     // Unique temp file per call to avoid concurrent races
     auto uid = std::chrono::steady_clock::now().time_since_epoch().count();
     std::mt19937_64 rng(uid ^ reinterpret_cast<uintptr_t>(&url));
-    std::string tmp = (fs::temp_directory_path() /
+    TempFile tmp;
+    tmp.path = (fs::temp_directory_path() /
         ("pylitehtml_" + std::to_string(rng()) + ".tmp")).string();
     {
-        std::ofstream out(tmp, std::ios::binary);
+        std::ofstream out(tmp.path, std::ios::binary);
+        if (!out) return nullptr;
         out.write(res->body.data(), res->body.size());
     }
-    cairo_surface_t* surf = load_file(tmp);
-    fs::remove(tmp);
-    return surf;
+    return load_file(tmp.path);  // tmp.~TempFile() cleans up on return or throw
 }

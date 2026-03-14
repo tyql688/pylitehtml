@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <stdexcept>
@@ -27,7 +28,12 @@ void PyContainer::create_surface(int w, int h) {
     if (cr_)      { cairo_destroy(cr_); cr_ = nullptr; }
     if (surface_) { cairo_surface_destroy(surface_); surface_ = nullptr; }
     surface_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    if (cairo_surface_status(surface_) != CAIRO_STATUS_SUCCESS)
+        throw std::runtime_error(std::string("Cairo surface: ") +
+            cairo_status_to_string(cairo_surface_status(surface_)));
     cr_ = cairo_create(surface_);
+    if (cairo_status(cr_) != CAIRO_STATUS_SUCCESS)
+        throw std::runtime_error("Cairo context create failed");
     // White background
     cairo_set_source_rgb(cr_, 1, 1, 1);
     cairo_paint(cr_);
@@ -74,7 +80,8 @@ litehtml::uint_ptr PyContainer::create_font(const litehtml::font_description& de
     handle->overline      = (descr.decoration_line & litehtml::text_decoration_line_overline) != 0;
 
     // Measure font metrics
-    if (fm_out && cr_) {
+    if (fm_out) {
+        assert(cr_ != nullptr && "create_font called before create_surface");
         PangoLayout* layout = pango_cairo_create_layout(cr_);
         pango_layout_set_font_description(layout, handle->desc);
         PangoContext* pango_ctx = pango_layout_get_context(layout);
@@ -176,6 +183,8 @@ void PyContainer::get_image_size(const char* src, const char* baseurl, litehtml:
         sz.height = static_cast<litehtml::pixel_t>(cairo_image_surface_get_height(s));
     }
 }
+// ic_.get() returns a non-owning pointer valid for the lifetime of ic_.
+// Do not cache or store this pointer beyond this function.
 void PyContainer::draw_image(litehtml::uint_ptr, const litehtml::background_layer& layer,
                               const std::string& url, const std::string& base_url) {
     cairo_surface_t* img = ic_.get(url, base_url.empty() ? base_url_ : base_url);
@@ -226,9 +235,11 @@ void PyContainer::get_language(litehtml::string& lang, litehtml::string& culture
 // ── Text transform ────────────────────────────────────────────────────────────
 void PyContainer::transform_text(litehtml::string& text, litehtml::text_transform tt) {
     if (tt == litehtml::text_transform_uppercase)
-        std::transform(text.begin(), text.end(), text.begin(), ::toupper);
+        std::transform(text.begin(), text.end(), text.begin(),
+            [](unsigned char c) { return static_cast<char>(::toupper(c)); });
     else if (tt == litehtml::text_transform_lowercase)
-        std::transform(text.begin(), text.end(), text.begin(), ::tolower);
+        std::transform(text.begin(), text.end(), text.begin(),
+            [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 }
 
 litehtml::element::ptr PyContainer::create_element(const char*, const litehtml::string_map&,
