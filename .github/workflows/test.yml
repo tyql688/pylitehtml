@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python: ["3.10", "3.11", "3.12"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
         with: { submodules: recursive }
@@ -23,7 +23,7 @@ jobs:
 
       - name: System deps (macOS)
         if: runner.os == 'macOS'
-        run: brew install cairo pango fontconfig webp jpeg-turbo cmake ninja
+        run: brew install --quiet cairo pango fontconfig webp jpeg-turbo cmake ninja 2>/dev/null || true
 
       - name: Build and test
         run: |
