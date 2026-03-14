@@ -8,3 +8,4 @@ __pycache__/
 _skbuild/
 .cmake/
 tests/assets/
+.venv/

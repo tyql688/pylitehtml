@@ -3,7 +3,7 @@ import shutil, pathlib
 import pylitehtml
 from pylitehtml import Renderer, OutputFormat
 
-FONTS_DIR = pathlib.Path(pylitehtml.__file__).parent / "fonts"
+FONTS_DIR = pathlib.Path(pylitehtml.__file__ or "").parent / "fonts"
 
 def test_bundled_noto_sans():
     r = Renderer(width=400, default_font="Noto Sans")

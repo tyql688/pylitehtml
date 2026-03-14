@@ -23,7 +23,7 @@ def test_raw_rgba_byte_order(renderer):
     """ARGB32 -> RGBA swizzle: red background must produce R=255, G=0, B=0."""
     html = "<html><body style='background:#ff0000;margin:0'><div style='height:2px'></div></body></html>"
     raw = renderer.render(html, fmt=OutputFormat.RAW, height=2)
-    r, g, b, a = raw.data[0], raw.data[1], raw.data[2], raw.data[3]
+    r, g, b, _ = raw.data[0], raw.data[1], raw.data[2], raw.data[3]
     assert r == 255, f"R={r}"
     assert g == 0,   f"G={g}"
     assert b == 0,   f"B={b}"
