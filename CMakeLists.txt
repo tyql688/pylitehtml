@@ -75,6 +75,11 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(_core PRIVATE stdc++fs)
 endif()
 
+# MSVC: enable M_PI and other POSIX math constants (not defined by default)
+if(MSVC)
+  target_compile_definitions(_core PRIVATE _USE_MATH_DEFINES)
+endif()
+
 # ── Install ───────────────────────────────────────────────────────────────────
 install(TARGETS _core DESTINATION pylitehtml)
 install(DIRECTORY fonts/ DESTINATION pylitehtml/fonts)
