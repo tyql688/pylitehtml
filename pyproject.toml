@@ -1,0 +1,26 @@
+[build-system]
+requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pylitehtml"
+version = "0.1.0"
+description = "HTML+CSS to image renderer based on litehtml"
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "pillow", "numpy"]
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+wheel.packages = ["src/python/pylitehtml"]
+cmake.verbose = true
+
+[tool.scikit-build.cmake.define]
+LITEHTML_BUILD_TESTING = "OFF"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
