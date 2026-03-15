@@ -76,9 +76,16 @@ jobs:
         # calls os.add_dll_directory() on that dlls/ dir, so the import works
         # without any extra PATH magic.
         run: |
+          # Ensure vcpkg bin is on PATH for delvewheel's DLL search
+          $env:PATH = "$env:VCPKG_BIN;$env:PATH"
+          Write-Host "VCPKG_BIN: $env:VCPKG_BIN"
+          Write-Host "jpeg62.dll present: $(Test-Path (Join-Path $env:VCPKG_BIN 'jpeg62.dll'))"
+          Get-ChildItem $env:VCPKG_BIN -Filter "*.dll" | Measure-Object | ForEach-Object { Write-Host "DLL count: $($_.Count)" }
+
           pip install scikit-build-core pybind11 delvewheel pytest pillow
           pip wheel . --no-build-isolation -w dist\
-          delvewheel repair dist\pylitehtml*.whl -w dist-repaired\ --add-path "$env:VCPKG_BIN"
+          delvewheel repair (Get-ChildItem dist\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName) `
+            -w dist-repaired\ --add-path "$env:VCPKG_BIN"
           pip install (Get-ChildItem dist-repaired\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName)
           pytest tests\ -v
         shell: pwsh
