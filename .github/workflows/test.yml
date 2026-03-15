@@ -52,9 +52,16 @@ jobs:
       - uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "b02e341c927f16d991edbd915d8ea43eac52096c"  # 2025.01.16
-          runVcpkgInstall: true
-          vcpkgJsonGlob: "**/vcpkg.json"
           vcpkgDirectory: "${{ runner.workspace }}/b/vcpkg"
+          # Don't use runVcpkgInstall: the glob "**/vcpkg.json" hits hundreds of
+          # port files inside vcpkg itself and never installs our packages.
+          # We run vcpkg install explicitly below.
+
+      - name: Install vcpkg dependencies
+        run: |
+          $exe = Join-Path "${{ runner.workspace }}" "b\vcpkg\vcpkg.exe"
+          & $exe install cairo pango fontconfig libwebp libjpeg-turbo pkgconf --triplet x64-windows
+        shell: pwsh
 
       - name: Configure build environment
         run: |
@@ -63,6 +70,8 @@ jobs:
           $bin       = Join-Path $installed "bin"
           $pkgconf   = Join-Path $installed "tools\pkgconf"
           $toolchain = Join-Path $vcpkg "scripts\buildsystems\vcpkg.cmake"
+          Write-Host "vcpkg bin exists: $(Test-Path $bin)"
+          Write-Host "DLL count: $((Get-ChildItem $bin -Filter '*.dll' -ErrorAction SilentlyContinue).Count)"
           Add-Content $env:GITHUB_PATH $pkgconf
           Add-Content $env:GITHUB_PATH $bin
           Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
@@ -71,17 +80,8 @@ jobs:
         shell: pwsh
 
       - name: Build wheel and bundle DLLs with delvewheel
-        # Build a real wheel (not editable), repair it so all vcpkg DLLs are
-        # bundled inside pylitehtml/dlls/, then install it.  __init__.py already
-        # calls os.add_dll_directory() on that dlls/ dir, so the import works
-        # without any extra PATH magic.
         run: |
-          # Ensure vcpkg bin is on PATH for delvewheel's DLL search
           $env:PATH = "$env:VCPKG_BIN;$env:PATH"
-          Write-Host "VCPKG_BIN: $env:VCPKG_BIN"
-          Write-Host "jpeg62.dll present: $(Test-Path (Join-Path $env:VCPKG_BIN 'jpeg62.dll'))"
-          Get-ChildItem $env:VCPKG_BIN -Filter "*.dll" | Measure-Object | ForEach-Object { Write-Host "DLL count: $($_.Count)" }
-
           pip install scikit-build-core pybind11 delvewheel pytest pillow
           pip wheel . --no-build-isolation -w dist\
           delvewheel repair (Get-ChildItem dist\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName) `
