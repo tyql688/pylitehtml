@@ -2,310 +2,209 @@
 
 ![CI](https://github.com/tyql688/pylitehtml/actions/workflows/test.yml/badge.svg)
 
-HTML+CSS → PNG/JPEG image renderer. Lightweight, no headless browser, thread-safe.
+HTML+CSS → PNG/JPEG 图像渲染器。轻量级，无需无头浏览器，线程安全。
 
-English | [中文](README_zh.md)
 
-## Install
+## 安装
 
 ```bash
 pip install pylitehtml
 ```
 
-## Quick Start
+## 快速上手
 
 ```python
 import pylitehtml
 
-# One-shot convenience function
-png_bytes = pylitehtml.render("<h1>Hello</h1>", width=800)
-with open("output.png", "wb") as f:
-    f.write(png_bytes)
-```
+# 一次性渲染
+png = pylitehtml.render("<h1>Hello</h1>", width=800)
 
-## API Reference
+# 复用渲染器（推荐，字体只加载一次）
+r = pylitehtml.Renderer(width=800)
+png = r.render("<h1>Hello</h1>")
+jpg = r.render("<h1>Hello</h1>", fmt="jpeg", quality=90)
 
-### `pylitehtml.render(html, width, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85)`
-
-Convenience wrapper — creates a temporary `Renderer`, renders once, returns bytes.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `html` | `str` | — | HTML source to render |
-| `width` | `int` | — | Viewport width in pixels |
-| `base_url` | `str` | `""` | Base URL for resolving relative resources |
-| `height` | `int` | `0` | Fixed height (0 = auto) |
-| `fmt` | `OutputFormat` | `PNG` | Output format |
-| `quality` | `int` | `85` | JPEG quality (1–100, ignored for PNG/RAW) |
-
-Returns `bytes` (PNG or JPEG) or `RawResult` (RAW).
-
----
-
-### `class Renderer(width=800, default_font="Noto Sans", default_font_size=16, extra_fonts=[], image_cache_max_bytes=67108864, image_timeout_ms=5000, image_max_bytes=10485760, allow_http_images=True, dpi=96.0, lang="en", culture="en-US")`
-
-Reusable renderer. Create once, call `.render()` many times. Thread-safe.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `width` | `int` | `800` | Viewport width in pixels |
-| `default_font` | `str` | `"Noto Sans"` | Fallback font family name |
-| `default_font_size` | `int` | `16` | Default font size in pixels |
-| `extra_fonts` | `list[str]` | `[]` | Additional font file paths to register |
-| `image_cache_max_bytes` | `int` | `67108864` | Max image cache size in bytes (64 MB) |
-| `image_timeout_ms` | `int` | `5000` | HTTP image fetch timeout in milliseconds |
-| `image_max_bytes` | `int` | `10485760` | Max size per image in bytes (10 MB) |
-| `allow_http_images` | `bool` | `True` | Whether to fetch images over HTTP/HTTPS |
-| `dpi` | `float` | `96.0` | Screen DPI for `pt` unit conversion and media queries |
-| `lang` | `str` | `"en"` | BCP 47 language tag (e.g. `"zh"`, `"ja"`) |
-| `culture` | `str` | `"en-US"` | Culture/locale string (e.g. `"zh-CN"`) |
-
-#### `Renderer.render(html, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85, allow_refit=False)`
-
-Render HTML and return image data.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `html` | `str` | — | HTML source to render |
-| `base_url` | `str` | `""` | Base URL for resolving relative resources |
-| `height` | `int` | `0` | Fixed height in pixels (0 = auto) |
-| `fmt` | `OutputFormat` | `PNG` | Output format |
-| `quality` | `int` | `85` | JPEG quality (1–100, ignored for PNG/RAW) |
-| `allow_refit` | `bool` | `False` | Re-render at content width if content is narrower than viewport |
-
-Returns `bytes` for PNG/JPEG, or `RawResult` for RAW.
-
----
-
-### `class OutputFormat`
-
-```python
-OutputFormat.PNG   # PNG-encoded bytes
-OutputFormat.JPEG  # JPEG-encoded bytes
-OutputFormat.RAW   # Uncompressed RGBA bytes (see RawResult)
+# 异步渲染（不阻塞事件循环）
+png = await r.render_async("<h1>Hello</h1>")
 ```
 
 ---
 
-### `class RawResult`
-
-Returned when `fmt=OutputFormat.RAW`.
+## Renderer 参数
 
 ```python
-result.data    # bytes — RGBA pixel data, row-major
-result.width   # int — image width in pixels
-result.height  # int — image height in pixels
-```
-
----
-
-### `class RenderError(Exception)`
-
-Raised when rendering fails (e.g., bad HTML structure, resource load error).
-
----
-
-### `class ImageFetchError(Exception)`
-
-Raised when an image cannot be fetched or decoded.
-
----
-
-## Examples
-
-### Reusable Renderer
-
-```python
-from pylitehtml import Renderer, OutputFormat
-
-renderer = Renderer(width=1200)
-
-# PNG (default)
-png = renderer.render("<p>Hello</p>")
-
-# JPEG
-jpg = renderer.render("<p>Hello</p>", fmt=OutputFormat.JPEG, quality=90)
-
-# Raw RGBA
-raw = renderer.render("<p>Hello</p>", fmt=OutputFormat.RAW)
-print(raw.width, raw.height, len(raw.data))  # e.g. 1200 600 2880000
-```
-
-### High Concurrency
-
-```python
-import concurrent.futures
-from pylitehtml import Renderer
-
-renderer = Renderer(width=800)  # shared across threads
-
-html_list = ["<h1>Page {}</h1>".format(i) for i in range(1000)]
-
-with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
-    images = list(pool.map(renderer.render, html_list))
-```
-
-### Custom Fonts
-
-```python
-from pylitehtml import Renderer
-
-renderer = Renderer(
-    width=800,
-    default_font="My Custom Font",
-    extra_fonts=["/path/to/extra.ttf"],
+Renderer(
+    width,                    # 必填：画布宽度（像素）
+    *,
+    default_font = "Noto Sans",  # 默认字体（系统需已安装）
+    default_font_size = 16,      # 默认字号（像素）
+    extra_fonts = None,          # 额外字体文件路径列表，如 ["/path/to/font.ttf"]
+    image_cache_mb = 64.0,       # 图片缓存上限（MB）
+    image_timeout_ms = 5000,     # HTTP 图片请求超时（毫秒）
+    image_max_mb = 10.0,         # 单张图片最大体积（MB），超出则跳过
+    allow_http_images = True,    # 是否允许通过 HTTP/HTTPS 加载图片
+    dpi = 96.0,                  # DPI，影响 pt 单位换算；HiDPI 用 144 或 192
+    device_height = 600,         # 媒体查询用的逻辑屏幕高度（不影响实际输出高度）
+    locale = "en-US",            # 语言区域，影响 CSS :lang() 选择器，如 "zh-CN"
 )
 ```
 
-### Inline Images (data: URIs)
+### 哪些参数通常需要改？
+
+| 场景 | 改哪个参数 |
+|------|-----------|
+| 渲染中文 / 多语言内容 | `locale="zh-CN"` |
+| 输出 HiDPI / Retina 图 | `dpi=192.0` |
+| 加载本地字体文件 | `extra_fonts=["/path/to/font.ttf"]` |
+| 禁用网络图片 | `allow_http_images=False` |
+| 渲染很多大图 | 调大 `image_cache_mb` |
+
+---
+
+## render() 参数
+
+```python
+r.render(
+    html,                        # 必填：HTML 字符串
+    *,
+    base_url = "",               # 资源基础路径，如 "file:///path/to/" 或 "https://..."
+    height = 0,                  # 固定输出高度（像素）；0 = 自动按内容高度
+    fmt = "png",                 # 输出格式："png" / "jpeg" / "raw"
+    quality = 85,                # JPEG 质量 1–100（png/raw 忽略此参数）
+    shrink_to_fit = False,       # True = 内容比 width 窄时，自动收窄画布宽度
+)
+```
+
+返回值：
+- `fmt="png"` / `fmt="jpeg"` → `bytes`
+- `fmt="raw"` → `RawResult`（含 `.data` `.width` `.height`，像素格式为 BGRA）
+
+`render_async()` 参数完全相同，加 `await` 调用即可。
+
+---
+
+## 支持与不支持
+
+| 功能 | 是否支持 |
+|------|---------|
+| PNG / JPEG / RAW 输出 | ✅ |
+| HTTP/HTTPS 图片（`<img src="https://...">`） | ✅ 默认开启 |
+| `data:` URI 内嵌图片（PNG/JPEG/WebP/SVG） | ✅ |
+| CSS `@import`（本地文件 / HTTP） | ✅ |
+| 多线程并发渲染 | ✅ |
+| 异步渲染（asyncio） | ✅ |
+| JavaScript | ❌ 静态渲染，不执行 JS |
+| CSS `@font-face`（HTTP 字体） | ❌ 不支持，字体须预先安装 |
+| CSS Grid | ❌ litehtml 暂不支持 |
+| Flexbox | ⚠️ 部分支持 |
+
+---
+
+## 常用示例
+
+### 渲染中文
+
+```python
+r = pylitehtml.Renderer(width=800, locale="zh-CN")
+png = r.render("<p>你好，世界</p>")
+```
+
+### 异步（FastAPI / asyncio）
+
+```python
+r = pylitehtml.Renderer(width=800)
+
+# 推荐：实例方法
+png = await r.render_async("<h1>Hello</h1>")
+
+# 一次性
+png = await pylitehtml.render_async("<h1>Hello</h1>", width=800)
+```
+
+### HiDPI 输出
+
+```python
+r = pylitehtml.Renderer(width=800, dpi=192.0)
+png = r.render("<p style='font-size:12pt'>Hello</p>")
+```
+
+### 内嵌图片（离线渲染）
 
 ```python
 import base64
-from pylitehtml import Renderer
 
 with open("logo.png", "rb") as f:
     b64 = base64.b64encode(f.read()).decode()
 
-html = f'<img src="data:image/png;base64,{b64}" width="100" height="50">'
-png = Renderer(width=400).render(html)
+png = pylitehtml.Renderer(width=400).render(
+    f'<img src="data:image/png;base64,{b64}">'
+)
 ```
 
-### High-DPI / Retina Rendering
+### 加载本地字体
 
 ```python
-from pylitehtml import Renderer
-
-# 192 DPI doubles pt-based sizes — good for HiDPI/Retina outputs
-renderer = Renderer(width=800, dpi=192.0)
-png = renderer.render("<p style='font-size:12pt'>Hello</p>")
+r = pylitehtml.Renderer(
+    width=800,
+    default_font="My Font",
+    extra_fonts=["/path/to/myfont.ttf"],
+)
 ```
 
-### Locale-Aware Rendering
-
-```python
-from pylitehtml import Renderer
-
-renderer = Renderer(width=800, lang="zh", culture="zh-CN")
-png = renderer.render("<p>你好，世界</p>")
-```
-
-### Width Auto-Refit
-
-```python
-from pylitehtml import Renderer, OutputFormat
-
-renderer = Renderer(width=800)
-# If content bounding box is narrower than 800px, the output image shrinks to fit
-raw = renderer.render("<table><tr><td>Hello</td></tr></table>",
-                      fmt=OutputFormat.RAW, allow_refit=True)
-print(raw.width, raw.height)  # may be narrower than 800
-```
-
-### Convert to PIL Image
+### 获取原始像素（接入 PIL / NumPy）
 
 ```python
 from PIL import Image
-import io
-from pylitehtml import Renderer, OutputFormat
+import numpy as np
 
-renderer = Renderer(width=800)
-raw = renderer.render("<h1>Hello</h1>", fmt=OutputFormat.RAW)
+r = pylitehtml.Renderer(width=800)
+raw = r.render("<h1>Hello</h1>", fmt="raw")
+
+# PIL
 img = Image.frombytes("RGBA", (raw.width, raw.height), raw.data)
-img.save("output.png")
+
+# NumPy，shape=(height, width, 4)，通道顺序 BGRA
+arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
 ```
 
-### NumPy Array
+### 高并发
 
 ```python
-import numpy as np
-from pylitehtml import Renderer, OutputFormat
+import concurrent.futures
 
-renderer = Renderer(width=800)
-raw = renderer.render("<h1>Hello</h1>", fmt=OutputFormat.RAW)
-arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
-# arr shape: (height, width, 4) — channels are BGRA (Cairo native)
+r = pylitehtml.Renderer(width=800)  # 线程安全，多线程共享
+pages = ["<h1>Page {}</h1>".format(i) for i in range(1000)]
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+    images = list(pool.map(r.render, pages))
 ```
 
-## Output Formats
+---
 
-| Format | Return type | Description |
-|--------|-------------|-------------|
-| `PNG` | `bytes` | Lossless, best for screenshots |
-| `JPEG` | `bytes` | Smaller files, `quality` 1–100 |
-| `RAW` | `RawResult` | Uncompressed BGRA pixels (Cairo native channel order) |
-
-## Supported Versions
-
-| Python | Linux | macOS | Windows |
-|--------|-------|-------|---------|
-| 3.10 | ✅ | ✅ | ✅ |
-| 3.11 | ✅ | ✅ | ✅ |
-| 3.12 | ✅ | ✅ | ✅ |
-| 3.13 | ✅ | ✅ | ✅ |
-| 3.14 | ✅ | ✅ | ✅ |
-
-## Known Limitations
-
-- **No JavaScript** — static HTML+CSS only
-- **No network requests** — external images/stylesheets must be inlined or served locally; use `data:` URIs to embed assets
-- **No SVG** — SVG images are not rendered
-- **CSS subset** — powered by [litehtml](https://github.com/litehtml/litehtml); some advanced CSS features (e.g., CSS Grid, Flexbox) may have incomplete support
-
-## Thread Safety
-
-`Renderer` is thread-safe after construction. Multiple threads may call `.render()` concurrently on a single instance. Do not construct multiple `Renderer` instances concurrently.
-
-## Building from Source
-
-### System Dependencies
+## 从源码构建
 
 **Ubuntu / Debian**
 ```bash
-sudo apt-get update
 sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev \
   libwebp-dev libjpeg-turbo8-dev cmake ninja-build pkg-config
+pip install -e ".[dev]" --no-build-isolation
 ```
 
-**Fedora / RHEL / CentOS**
-```bash
-sudo dnf install -y cairo-devel pango-devel fontconfig-devel \
-  libwebp-devel libjpeg-turbo-devel cmake ninja-build pkgconf
-```
-
-**macOS (Homebrew)**
+**macOS**
 ```bash
 brew install cairo pango fontconfig webp jpeg-turbo cmake ninja
+CC=/usr/bin/clang CXX=/usr/bin/clang++ pip install -e ".[dev]" --no-build-isolation
 ```
-> Note: On macOS, use Apple's clang (not Homebrew LLVM) to avoid C++ ABI issues:
-> `CC=/usr/bin/clang CXX=/usr/bin/clang++ pip install -e . --no-build-isolation`
 
-**Windows**
-
-Windows builds require [vcpkg](https://github.com/microsoft/vcpkg) and Visual Studio 2019+.
-See [`.github/workflows/test.yml`](.github/workflows/test.yml) for the full CI build recipe.
-
-### Build
-
+**运行测试**
 ```bash
-# Recommended: use a virtual environment
-uv venv .venv && uv pip install scikit-build-core pybind11 pytest pillow
-
-# Build and install in editable mode
-# macOS: prefix with CC=/usr/bin/clang CXX=/usr/bin/clang++ if using Homebrew LLVM
-pip install -e . --no-build-isolation
-
-# Run tests
 pytest tests/ -v
 ```
 
-## Built On
+---
 
-- [litehtml](https://github.com/litehtml/litehtml) — HTML/CSS layout engine
-- [Cairo](https://www.cairographics.org/) — 2D graphics rendering
-- [Pango](https://pango.gnome.org/) — text layout and rendering
-- [FontConfig](https://www.freedesktop.org/wiki/Software/fontconfig/) — font discovery
-- [pybind11](https://github.com/pybind/pybind11) — Python/C++ bindings
+## 基于
 
-## License
+[litehtml](https://github.com/litehtml/litehtml) · [Cairo](https://www.cairographics.org/) · [Pango](https://pango.gnome.org/) · [FontConfig](https://www.freedesktop.org/wiki/Software/fontconfig/) · [pybind11](https://github.com/pybind/pybind11)
 
-MIT
+MIT License

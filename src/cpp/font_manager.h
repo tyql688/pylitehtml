@@ -1,7 +1,6 @@
 // src/cpp/font_manager.h
 #pragma once
 #include <fontconfig/fontconfig.h>
-#include <pango/pango.h>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -29,7 +28,6 @@ public:
 private:
     Config cfg_;
     FcConfig* fc_config_ = nullptr;
-    PangoFontMap* font_map_ = nullptr;
 
     // fontconfig global init is done once per process via call_once.
     static std::once_flag fc_init_flag_;

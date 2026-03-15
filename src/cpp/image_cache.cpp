@@ -7,10 +7,15 @@
 #include <jpeglib.h>
 #include <csetjmp>
 #include <cstring>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <vector>
+
+#ifdef HAVE_LIBRSVG
+#include <librsvg/rsvg.h>
+#endif
 
 #undef CPPHTTPLIB_OPENSSL_SUPPORT
 #include "vendor/httplib.h"
@@ -106,24 +111,6 @@ cairo_surface_t* ImageCache::load_file(const std::string& path) {
     return load_from_memory(data.data(), data.size());
 }
 
-// load_jpeg_file and load_webp_file are kept for ABI compatibility but delegate
-// to the in-memory versions.
-cairo_surface_t* ImageCache::load_jpeg_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return nullptr;
-    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
-    if (data.size() > cfg_.max_image_bytes) return nullptr;
-    return load_jpeg_mem(data.data(), data.size());
-}
-
-cairo_surface_t* ImageCache::load_webp_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return nullptr;
-    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
-    if (data.size() > cfg_.max_image_bytes) return nullptr;
-    return load_webp_mem(data.data(), data.size());
-}
-
 // ── data: URI support ─────────────────────────────────────────────────────────
 
 cairo_surface_t* ImageCache::load_data_uri(const std::string& uri) {
@@ -170,6 +157,21 @@ cairo_surface_t* ImageCache::load_from_memory(const uint8_t* data, size_t size) 
     if (size >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' &&
         data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P')
         return load_webp_mem(data, size);
+
+    // SVG: starts with '<svg' or '<?xml' (skip leading whitespace)
+    {
+        size_t i = 0;
+        while (i < size && (data[i] == ' ' || data[i] == '\t' ||
+                             data[i] == '\r' || data[i] == '\n')) ++i;
+        bool looks_svg = false;
+        if (i + 4 <= size && data[i] == '<' && data[i+1] == 's' &&
+                              data[i+2] == 'v' && data[i+3] == 'g')
+            looks_svg = true;
+        if (!looks_svg && i + 5 <= size && data[i] == '<' && data[i+1] == '?' &&
+                                           data[i+2] == 'x' && data[i+3] == 'm' && data[i+4] == 'l')
+            looks_svg = true;
+        if (looks_svg) return load_svg_mem(data, size);
+    }
 
     return nullptr;
 }
@@ -246,6 +248,47 @@ cairo_surface_t* ImageCache::load_webp_mem(const uint8_t* data, size_t size) {
     cairo_surface_mark_dirty(surf);
     WebPFree(rgba);
     return surf;
+}
+
+cairo_surface_t* ImageCache::load_svg_mem(const uint8_t* data, size_t size) {
+#ifdef HAVE_LIBRSVG
+    GError* err = nullptr;
+    RsvgHandle* handle = rsvg_handle_new_from_data(data, size, &err);
+    if (!handle) {
+        if (err) g_error_free(err);
+        return nullptr;
+    }
+    rsvg_handle_set_dpi(handle, 96.0);
+
+    double w = 0.0, h = 0.0;
+    if (!rsvg_handle_get_intrinsic_size_in_pixels(handle, &w, &h) || w <= 0 || h <= 0) {
+        // SVG has no intrinsic size (e.g. only viewBox with no width/height).
+        // Default to 512×512 — caller can scale later via CSS.
+        w = h = 512.0;
+    }
+
+    int iw = static_cast<int>(std::ceil(w));
+    int ih = static_cast<int>(std::ceil(h));
+    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, iw, ih);
+    cairo_t* cr = cairo_create(surf);
+
+    // White background
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_paint(cr);
+
+    RsvgRectangle viewport{0.0, 0.0, static_cast<double>(iw), static_cast<double>(ih)};
+    GError* render_err = nullptr;
+    rsvg_handle_render_document(handle, cr, &viewport, &render_err);
+    if (render_err) g_error_free(render_err);
+
+    cairo_surface_flush(surf);
+    cairo_destroy(cr);
+    g_object_unref(handle);
+    return surf;
+#else
+    (void)data; (void)size;
+    return nullptr;
+#endif
 }
 
 cairo_surface_t* ImageCache::load_http(const std::string& url) {

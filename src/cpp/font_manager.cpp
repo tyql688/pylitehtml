@@ -41,13 +41,8 @@ FontManager::FontManager(Config cfg) : cfg_(std::move(cfg)) {
         FcConfigSetCurrent(fc_config_);
         // fc_config_ is now owned by fontconfig; do not destroy it.
     });
-
-    // ── Each FontManager gets its own Pango font map ──────────────────────────
-    font_map_ = pango_cairo_font_map_new();
-    if (!font_map_) throw std::runtime_error("pango_cairo_font_map_new failed");
 }
 
 FontManager::~FontManager() {
-    if (font_map_) g_object_unref(font_map_);
     // fc_config_ is owned by fontconfig after FcConfigSetCurrent; do not free.
 }

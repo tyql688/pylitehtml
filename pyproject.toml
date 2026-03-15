@@ -23,7 +23,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pillow", "numpy"]
+dev = ["pytest", "pillow", "numpy", "pytest-asyncio"]
 
 [tool.scikit-build]
 cmake.build-type = "Release"
@@ -35,3 +35,4 @@ LITEHTML_BUILD_TESTING = "OFF"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"

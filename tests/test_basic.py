@@ -1,4 +1,5 @@
 # tests/test_basic.py
+import pytest
 import pylitehtml
 from pylitehtml import Renderer, OutputFormat, RawResult
 
@@ -39,6 +40,23 @@ def test_fixed_height(renderer, simple_html):
 def test_convenience_function(simple_html):
     png = pylitehtml.render(simple_html, width=400)
     assert png[:8] == b'\x89PNG\r\n\x1a\n'
+
+def test_render_fmt_string_png(renderer, simple_html):
+    assert renderer.render(simple_html, fmt="png")[:8] == b'\x89PNG\r\n\x1a\n'
+
+
+def test_render_fmt_string_jpeg(renderer, simple_html):
+    assert renderer.render(simple_html, fmt="jpeg")[:2] == b'\xff\xd8'
+
+
+def test_render_fmt_string_raw(renderer, simple_html):
+    assert isinstance(renderer.render(simple_html, fmt="raw"), RawResult)
+
+
+def test_render_fmt_invalid_raises(renderer, simple_html):
+    with pytest.raises(ValueError, match="Unknown fmt"):
+        renderer.render(simple_html, fmt="bmp")
+
 
 def test_flexbox():
     r = Renderer(width=400)

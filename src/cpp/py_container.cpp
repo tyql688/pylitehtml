@@ -17,9 +17,11 @@
 namespace fs = std::filesystem;
 
 PyContainer::PyContainer(FontManager& fm, ImageCache& ic, int width,
-                         float dpi, std::string lang, std::string culture)
+                         float dpi, int device_height,
+                         std::string lang, std::string culture)
     : fm_(fm), ic_(ic), width_(width)
     , dpi_(dpi > 0 ? dpi : 96.0f)
+    , device_height_(device_height > 0 ? device_height : 600)
     , lang_(std::move(lang))
     , culture_(std::move(culture)) {}
 
@@ -45,7 +47,7 @@ void PyContainer::create_surface(int w, int h) {
 }
 
 int PyContainer::render(const std::string& html, const std::string& base_url,
-                        int fixed_height, bool allow_refit) {
+                        int fixed_height, bool shrink_to_fit) {
     base_url_ = base_url;
     create_surface(width_, 1);  // minimal surface needed for text metrics
 
@@ -54,9 +56,9 @@ int PyContainer::render(const std::string& html, const std::string& base_url,
 
     doc->render(width_);
 
-    // Auto-refit: if content bounding box is narrower than viewport, re-render at that width.
+    // Shrink-to-fit: if content bounding box is narrower than viewport, re-render at that width.
     // doc->width() returns the max right-edge across all rendered elements (starts at 0).
-    if (allow_refit) {
+    if (shrink_to_fit) {
         int cw = static_cast<int>(doc->width());
         if (cw > 0 && cw < width_) {
             width_ = cw;
@@ -244,19 +246,42 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
         if (f) { std::ostringstream ss; ss << f.rdbuf(); text = ss.str(); }
         return;
     }
-    // HTTP CSS: skip
-    text = "";
+
+    // HTTP CSS: resolve URL and fetch
+    if (effective_base.rfind("http://", 0) == 0 || effective_base.rfind("https://", 0) == 0) {
+        // Build absolute URL: if url is already absolute, use it; otherwise join with base dir
+        std::string abs_url;
+        if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
+            abs_url = url;
+        } else {
+            auto slash = effective_base.rfind('/');
+            abs_url = effective_base.substr(0, slash + 1) + url;
+        }
+
+        bool https = abs_url.rfind("https://", 0) == 0;
+        std::string rest = abs_url.substr(https ? 8 : 7);
+        auto slash = rest.find('/');
+        std::string host = rest.substr(0, slash);
+        std::string path = (slash != std::string::npos) ? rest.substr(slash) : "/";
+
+        httplib::Client cli((https ? "https://" : "http://") + host);
+        cli.set_connection_timeout(5, 0);
+        cli.set_read_timeout(5, 0);
+        auto res = cli.Get(path);
+        if (res && res->status == 200) text = res->body;
+        return;
+    }
 }
 
 // ── Viewport / Media ──────────────────────────────────────────────────────────
 void PyContainer::get_viewport(litehtml::position& vp) const {
     vp = {0, 0, static_cast<litehtml::pixel_t>(width_),
-          static_cast<litehtml::pixel_t>(rendered_height_ > 0 ? rendered_height_ : 600)};
+          static_cast<litehtml::pixel_t>(rendered_height_ > 0 ? rendered_height_ : device_height_)};
 }
 void PyContainer::get_media_features(litehtml::media_features& mf) const {
     mf.type       = litehtml::media_type_screen;
     mf.width      = static_cast<litehtml::pixel_t>(width_);
-    mf.height     = static_cast<litehtml::pixel_t>(rendered_height_ > 0 ? rendered_height_ : 600);
+    mf.height     = static_cast<litehtml::pixel_t>(rendered_height_ > 0 ? rendered_height_ : device_height_);
     mf.color      = 8;
     mf.resolution = static_cast<litehtml::pixel_t>(dpi_);
 }

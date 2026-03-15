@@ -35,9 +35,10 @@ public:
              std::vector<std::string> extra_fonts,
              size_t image_cache_max_bytes, int image_timeout_ms,
              size_t image_max_bytes, bool allow_http_images,
-             float dpi, std::string lang, std::string culture)
+             float dpi, int device_height, std::string lang, std::string culture)
         : width_(width)
         , dpi_(dpi > 0 ? dpi : 96.0f)
+        , device_height_(device_height > 0 ? device_height : 600)
         , lang_(std::move(lang))
         , culture_(std::move(culture))
         , fm_(FontManager::Config{
@@ -53,16 +54,16 @@ public:
     {}
 
     py::object render(const std::string& html, const std::string& base_url,
-                      int height, OutputFormat fmt, int quality, bool allow_refit) {
+                      int height, OutputFormat fmt, int quality, bool shrink_to_fit) {
         // Release the GIL only for the CPU-heavy rendering work.
         // py::bytes / py::cast must be constructed while holding the GIL.
         std::vector<uint8_t> buf;
         int surf_w = 0, surf_h = 0;
         {
             py::gil_scoped_release release;
-            PyContainer container(fm_, ic_, width_, dpi_, lang_, culture_);
+            PyContainer container(fm_, ic_, width_, dpi_, device_height_, lang_, culture_);
             try {
-                container.render(html, base_url, height, allow_refit);
+                container.render(html, base_url, height, shrink_to_fit);
             } catch (const std::exception& e) {
                 throw RenderError(e.what());
             }
@@ -90,6 +91,7 @@ public:
 private:
     int         width_;
     float       dpi_;
+    int         device_height_;
     std::string lang_;
     std::string culture_;
     FontManager fm_;
@@ -115,7 +117,7 @@ PYBIND11_MODULE(_core, m) {
 
     py::class_<Renderer>(m, "Renderer")
         .def(py::init<int,std::string,int,std::vector<std::string>,
-                      size_t,int,size_t,bool,float,std::string,std::string>(),
+                      size_t,int,size_t,bool,float,int,std::string,std::string>(),
              py::arg("width"),
              py::arg("default_font")          = "Noto Sans",
              py::arg("default_font_size")     = 16,
@@ -125,6 +127,7 @@ PYBIND11_MODULE(_core, m) {
              py::arg("image_max_bytes")       = 10*1024*1024,
              py::arg("allow_http_images")     = true,
              py::arg("dpi")                   = 96.0f,
+             py::arg("device_height")         = 600,
              py::arg("lang")                  = "en",
              py::arg("culture")               = "en-US")
         .def("render", &Renderer::render,
@@ -133,20 +136,22 @@ PYBIND11_MODULE(_core, m) {
              py::arg("height")      = 0,
              py::arg("fmt")         = OutputFormat::PNG,
              py::arg("quality")     = 85,
-             py::arg("allow_refit") = false);
+             py::arg("shrink_to_fit") = false);
 
     // Note: this convenience function constructs a full Renderer (including
     // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
     // use the Renderer class directly.
     m.def("render",
         [](const std::string& html, int width, const std::string& base_url,
-           int height, OutputFormat fmt, int quality) -> py::object {
+           int height, OutputFormat fmt, int quality, bool shrink_to_fit) -> py::object {
             Renderer r(width,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,
-                       true,96.0f,"en","en-US");
-            return r.render(html, base_url, height, fmt, quality, false);
+                       true,96.0f,600,"en","en-US");
+            return r.render(html, base_url, height, fmt, quality, shrink_to_fit);
         },
         py::arg("html"), py::arg("width"),
-        py::arg("base_url") = "", py::arg("height") = 0,
-        py::arg("fmt")      = OutputFormat::PNG,
-        py::arg("quality")  = 85);
+        py::arg("base_url")      = "",
+        py::arg("height")        = 0,
+        py::arg("fmt")           = OutputFormat::PNG,
+        py::arg("quality")       = 85,
+        py::arg("shrink_to_fit") = false);
 }

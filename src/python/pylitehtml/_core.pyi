@@ -53,6 +53,7 @@ class Renderer:
         image_max_bytes: int = 10_485_760,
         allow_http_images: bool = True,
         dpi: float = 96.0,
+        device_height: int = 600,
         lang: str = "en",
         culture: str = "en-US",
     ) -> None:
@@ -83,6 +84,10 @@ class Renderer:
         dpi:
             Screen DPI used for ``pt`` unit conversion and ``resolution`` media
             features (default 96). Use ``144`` or ``192`` for HiDPI / Retina output.
+        device_height:
+            Logical screen height in pixels reported to CSS media queries (default 600).
+            Does not affect the rendered canvas height — use *height* in :meth:`render`
+            for that.
         lang:
             BCP 47 language tag reported to litehtml (e.g. ``"en"``, ``"zh"``).
             Affects ``:lang()`` CSS selectors.
@@ -98,7 +103,7 @@ class Renderer:
         height: int = 0,
         fmt: OutputFormat = OutputFormat.PNG,
         quality: int = 85,
-        allow_refit: bool = False,
+        shrink_to_fit: bool = False,
     ) -> bytes | RawResult:
         """
         Render HTML and return image data.
@@ -120,7 +125,7 @@ class Renderer:
             for RAW.
         quality:
             JPEG compression quality, 1–100. Ignored for PNG and RAW.
-        allow_refit:
+        shrink_to_fit:
             If ``True`` and the rendered content bounding box is narrower than
             *width*, re-render at the content width so the output image is not
             padded with empty space on the right.
@@ -141,6 +146,7 @@ def render(
     height: int = 0,
     fmt: OutputFormat = OutputFormat.PNG,
     quality: int = 85,
+    shrink_to_fit: bool = False,
 ) -> bytes | RawResult:
     """
     One-shot convenience function.
