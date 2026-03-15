@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
 project(pylitehtml CXX)
 
+# macOS: pin deployment target to match Homebrew Python (15.0).
+# Without this, CMake defaults to the current SDK version and produces a .so
+# that requires libc++ symbols unavailable in older Python runtimes.
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum macOS version")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)  # required for .so on Linux
