@@ -59,8 +59,11 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $exe = Join-Path "${{ runner.workspace }}" "b\vcpkg\vcpkg.exe"
-          & $exe install cairo pango fontconfig libwebp libjpeg-turbo pkgconf --triplet x64-windows
+          $exe  = Join-Path "${{ runner.workspace }}" "b\vcpkg\vcpkg.exe"
+          $root = Join-Path "${{ runner.workspace }}" "b\vcpkg\installed"
+          # Manifest mode: no package args allowed; use --x-install-root to write
+          # to vcpkg_root/installed/ instead of the default ./vcpkg_installed/
+          & $exe install --triplet x64-windows --x-install-root $root
         shell: pwsh
 
       - name: Configure build environment
