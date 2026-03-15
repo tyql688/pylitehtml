@@ -35,9 +35,6 @@ jobs:
     runs-on: windows-latest
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-      # Static-MD: vcpkg libs linked statically; CRT stays dynamic (required for Python ext).
-      # This eliminates all DLL-loading issues at test time.
-      VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
     steps:
       - uses: actions/checkout@v6
         with: { submodules: recursive }
@@ -62,17 +59,26 @@ jobs:
       - name: Configure build environment
         run: |
           $vcpkg     = Join-Path "${{ runner.workspace }}" "b\vcpkg"
-          $installed = Join-Path $vcpkg "installed\x64-windows-static-md"
+          $installed = Join-Path $vcpkg "installed\x64-windows"
+          $bin       = Join-Path $installed "bin"
           $pkgconf   = Join-Path $installed "tools\pkgconf"
           $toolchain = Join-Path $vcpkg "scripts\buildsystems\vcpkg.cmake"
           Add-Content $env:GITHUB_PATH $pkgconf
+          Add-Content $env:GITHUB_PATH $bin
           Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
+          Add-Content $env:GITHUB_ENV "VCPKG_BIN=$bin"
           Add-Content $env:GITHUB_ENV "SKBUILD_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$toolchain"
         shell: pwsh
 
-      - name: Build and test
+      - name: Build wheel and bundle DLLs with delvewheel
+        # Build a real wheel (not editable), repair it so all vcpkg DLLs are
+        # bundled inside pylitehtml/dlls/, then install it.  __init__.py already
+        # calls os.add_dll_directory() on that dlls/ dir, so the import works
+        # without any extra PATH magic.
         run: |
-          pip install scikit-build-core pybind11 pytest pillow
-          pip install -e . --no-build-isolation
-          pytest tests/ -v
+          pip install scikit-build-core pybind11 delvewheel pytest pillow
+          pip wheel . --no-build-isolation -w dist\
+          delvewheel repair dist\pylitehtml*.whl -w dist-repaired\ --add-path "$env:VCPKG_BIN"
+          pip install (Get-ChildItem dist-repaired\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName)
+          pytest tests\ -v
         shell: pwsh
