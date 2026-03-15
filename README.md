@@ -1,5 +1,7 @@
 # pylitehtml
 
+![CI](https://github.com/tyql688/pylitehtml/actions/workflows/test.yml/badge.svg)
+
 HTML+CSS → PNG/JPEG image renderer. Lightweight, no headless browser, thread-safe.
 
 ## Install
@@ -21,14 +23,14 @@ with open("output.png", "wb") as f:
 
 ## API Reference
 
-### `pylitehtml.render(html, *, width=800, base_url="", height=0, fmt=OutputFormat.PNG, quality=85)`
+### `pylitehtml.render(html, width, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85)`
 
 Convenience wrapper — creates a temporary `Renderer`, renders once, returns bytes.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `html` | `str` | — | HTML source to render |
-| `width` | `int` | `800` | Viewport width in pixels |
+| `width` | `int` | — | Viewport width in pixels |
 | `base_url` | `str` | `""` | Base URL for resolving relative resources |
 | `height` | `int` | `0` | Fixed height (0 = auto) |
 | `fmt` | `OutputFormat` | `PNG` | Output format |
@@ -38,17 +40,20 @@ Returns `bytes` (PNG or JPEG) or `RawResult` (RAW).
 
 ---
 
-### `class Renderer(width=800, fonts_dir="", default_font="Noto Sans", default_font_size=16, extra_fonts=[])`
+### `class Renderer(width=800, default_font="Noto Sans", default_font_size=16, extra_fonts=[], image_cache_max_bytes=67108864, image_timeout_ms=5000, image_max_bytes=10485760, allow_http_images=True)`
 
 Reusable renderer. Create once, call `.render()` many times. Thread-safe.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `width` | `int` | `800` | Viewport width in pixels |
-| `fonts_dir` | `str` | `""` | Path to a directory of bundled fonts |
 | `default_font` | `str` | `"Noto Sans"` | Fallback font family name |
 | `default_font_size` | `int` | `16` | Default font size in pixels |
 | `extra_fonts` | `list[str]` | `[]` | Additional font file paths to register |
+| `image_cache_max_bytes` | `int` | `67108864` | Max image cache size in bytes (64 MB) |
+| `image_timeout_ms` | `int` | `5000` | HTTP image fetch timeout in milliseconds |
+| `image_max_bytes` | `int` | `10485760` | Max size per image in bytes (10 MB) |
+| `allow_http_images` | `bool` | `True` | Whether to fetch images over HTTP/HTTPS |
 
 #### `Renderer.render(html, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85)`
 
@@ -83,6 +88,12 @@ result.height  # int — image height in pixels
 ### `class RenderError(Exception)`
 
 Raised when rendering fails (e.g., bad HTML structure, resource load error).
+
+---
+
+### `class ImageFetchError(Exception)`
+
+Raised when an image cannot be fetched or decoded.
 
 ---
 
@@ -174,6 +185,7 @@ arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
 | 3.11 | ✅ | ✅ | ✅ |
 | 3.12 | ✅ | ✅ | ✅ |
 | 3.13 | ✅ | ✅ | ✅ |
+| 3.14 | ✅ | ✅ | — |
 
 ## Known Limitations
 
