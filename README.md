@@ -4,6 +4,8 @@
 
 HTML+CSS → PNG/JPEG image renderer. Lightweight, no headless browser, thread-safe.
 
+English | [中文](README_zh.md)
+
 ## Install
 
 ```bash
@@ -185,7 +187,7 @@ arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
 | 3.11 | ✅ | ✅ | ✅ |
 | 3.12 | ✅ | ✅ | ✅ |
 | 3.13 | ✅ | ✅ | ✅ |
-| 3.14 | ✅ | ✅ | — |
+| 3.14 | ✅ | ✅ | ✅ |
 
 ## Known Limitations
 

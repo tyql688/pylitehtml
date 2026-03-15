@@ -36,12 +36,15 @@ jobs:
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    strategy:
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
         with: { submodules: recursive }
 
       - uses: actions/setup-python@v6
-        with: { python-version: "3.12" }
+        with: { python-version: "${{ matrix.python }}" }
 
       - name: Enable vcpkg binary cache (x-gha)
         uses: actions/github-script@v8
