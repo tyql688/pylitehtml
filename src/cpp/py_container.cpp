@@ -1,5 +1,6 @@
 // src/cpp/py_container.cpp
 #include "py_container.h"
+#include "base64.h"
 #include <pango/pangocairo.h>
 #include <filesystem>
 #include <fstream>
@@ -15,8 +16,12 @@
 
 namespace fs = std::filesystem;
 
-PyContainer::PyContainer(FontManager& fm, ImageCache& ic, int width)
-    : fm_(fm), ic_(ic), width_(width) {}
+PyContainer::PyContainer(FontManager& fm, ImageCache& ic, int width,
+                         float dpi, std::string lang, std::string culture)
+    : fm_(fm), ic_(ic), width_(width)
+    , dpi_(dpi > 0 ? dpi : 96.0f)
+    , lang_(std::move(lang))
+    , culture_(std::move(culture)) {}
 
 PyContainer::~PyContainer() {
     fonts_.clear();
@@ -39,14 +44,25 @@ void PyContainer::create_surface(int w, int h) {
     cairo_paint(cr_);
 }
 
-int PyContainer::render(const std::string& html, const std::string& base_url, int fixed_height) {
+int PyContainer::render(const std::string& html, const std::string& base_url,
+                        int fixed_height, bool allow_refit) {
     base_url_ = base_url;
-    create_surface(width_, 1);  // temporary 1px surface for layout pass
+    create_surface(width_, 1);  // minimal surface needed for text metrics
 
     auto doc = litehtml::document::createFromString(html, this);
     if (!doc) throw std::runtime_error("litehtml: failed to parse HTML");
 
     doc->render(width_);
+
+    // Auto-refit: if content bounding box is narrower than viewport, re-render at that width.
+    // doc->width() returns the max right-edge across all rendered elements (starts at 0).
+    if (allow_refit) {
+        int cw = static_cast<int>(doc->width());
+        if (cw > 0 && cw < width_) {
+            width_ = cw;
+            doc->render(width_);
+        }
+    }
 
     int h = (fixed_height > 0) ? fixed_height : static_cast<int>(doc->height());
     if (h < 1) h = 1;
@@ -159,7 +175,7 @@ void PyContainer::draw_text(litehtml::uint_ptr, const char* text, litehtml::uint
 }
 
 litehtml::pixel_t PyContainer::pt_to_px(float pt) const {
-    return static_cast<litehtml::pixel_t>(pt * 96.0f / 72.0f);
+    return static_cast<litehtml::pixel_t>(pt * dpi_ / 72.0f);
 }
 litehtml::pixel_t PyContainer::get_default_font_size() const {
     return static_cast<litehtml::pixel_t>(fm_.default_font_size_px());
@@ -202,6 +218,22 @@ void PyContainer::set_base_url(const char* u) { if (u) base_url_ = u; }
 
 void PyContainer::import_css(litehtml::string& text, const litehtml::string& url,
                                litehtml::string& baseurl) {
+    // Handle data: URIs directly (e.g. data:text/css;base64,...)
+    if (url.rfind("data:", 0) == 0) {
+        auto comma = url.find(',');
+        if (comma != std::string::npos) {
+            std::string header = url.substr(5, comma - 5);
+            if (header.find(";base64") != std::string::npos) {
+                auto raw = base64_decode(url.substr(comma + 1));
+                text = std::string(raw.begin(), raw.end());
+            } else {
+                // Plain (URL-encoded) data URI — use as-is
+                text = url.substr(comma + 1);
+            }
+        }
+        return;
+    }
+
     const std::string& effective_base = baseurl.empty() ? base_url_ : std::string(baseurl);
     if (effective_base.empty()) return;
 
@@ -212,7 +244,7 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
         if (f) { std::ostringstream ss; ss << f.rdbuf(); text = ss.str(); }
         return;
     }
-    // HTTP CSS: for v1, skip
+    // HTTP CSS: skip
     text = "";
 }
 
@@ -226,10 +258,10 @@ void PyContainer::get_media_features(litehtml::media_features& mf) const {
     mf.width      = static_cast<litehtml::pixel_t>(width_);
     mf.height     = static_cast<litehtml::pixel_t>(rendered_height_ > 0 ? rendered_height_ : 600);
     mf.color      = 8;
-    mf.resolution = 96;
+    mf.resolution = static_cast<litehtml::pixel_t>(dpi_);
 }
 void PyContainer::get_language(litehtml::string& lang, litehtml::string& culture) const {
-    lang = "en"; culture = "en-US";
+    lang = lang_; culture = culture_;
 }
 
 // ── Text transform ────────────────────────────────────────────────────────────

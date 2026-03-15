@@ -27,11 +27,16 @@ struct FontHandle {
 // MUST be stack-allocated inside render() — never stored in Renderer.
 class PyContainer : public container_cairo {
 public:
-    PyContainer(FontManager& fm, ImageCache& ic, int width);
+    PyContainer(FontManager& fm, ImageCache& ic, int width,
+                float dpi = 96.0f,
+                std::string lang = "en",
+                std::string culture = "en-US");
     ~PyContainer();
 
     // Render html into an internal cairo_surface_t; returns actual height.
-    int render(const std::string& html, const std::string& base_url, int fixed_height);
+    // allow_refit: re-render at content_width if content is narrower than width.
+    int render(const std::string& html, const std::string& base_url,
+               int fixed_height, bool allow_refit = false);
 
     cairo_surface_t* surface() const { return surface_; }
 
@@ -55,7 +60,7 @@ public:
 
     // ── Required abstract methods from container_cairo ───────────────────────
     cairo_surface_t* get_image(const std::string& url) override;
-    double get_screen_dpi() const override { return 96.0; }
+    double get_screen_dpi() const override { return static_cast<double>(dpi_); }
     int get_screen_width() const override { return width_; }
     int get_screen_height() const override { return rendered_height_ > 0 ? rendered_height_ : 600; }
 
@@ -80,6 +85,9 @@ private:
     FontManager& fm_;
     ImageCache&  ic_;
     int          width_;
+    float        dpi_;
+    std::string  lang_;
+    std::string  culture_;
     int          rendered_height_ = 0;
     std::string  base_url_;
 

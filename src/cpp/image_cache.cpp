@@ -1,16 +1,15 @@
 // src/cpp/image_cache.cpp
 #include "image_cache.h"
+#include "base64.h"
 #include <cairo.h>
 #include <webp/decode.h>
 #include <cstdio>   // FILE — required before jpeglib.h
 #include <jpeglib.h>
 #include <csetjmp>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <stdexcept>
-#include <random>
-#include <chrono>
 #include <vector>
 
 #undef CPPHTTPLIB_OPENSSL_SUPPORT
@@ -75,6 +74,8 @@ void ImageCache::evict_to_fit(size_t needed) {
 
 std::string ImageCache::resolve(const std::string& url, const std::string& base_url) const {
     if (url.empty()) return {};
+    // data: URIs are self-contained; return as-is without base resolution
+    if (url.rfind("data:", 0) == 0) return url;
     if (url.find("://") != std::string::npos) return url;
     if (url[0] == '/') return "file://" + url;
     if (base_url.rfind("file://", 0) == 0) {
@@ -90,6 +91,7 @@ std::string ImageCache::resolve(const std::string& url, const std::string& base_
 
 cairo_surface_t* ImageCache::load(const std::string& resolved) {
     if (resolved.rfind("file://", 0) == 0) return load_file(resolved.substr(7));
+    if (resolved.rfind("data:", 0) == 0) return load_data_uri(resolved);
     if (cfg_.allow_http &&
         (resolved.rfind("http://", 0) == 0 || resolved.rfind("https://", 0) == 0))
         return load_http(resolved);
@@ -97,30 +99,86 @@ cairo_surface_t* ImageCache::load(const std::string& resolved) {
 }
 
 cairo_surface_t* ImageCache::load_file(const std::string& path) {
-    // Try PNG (Cairo built-in)
-    cairo_surface_t* s = cairo_image_surface_create_from_png(path.c_str());
-    if (cairo_surface_status(s) == CAIRO_STATUS_SUCCESS) return s;
-    cairo_surface_destroy(s);
-
-    // Try JPEG
-    s = load_jpeg_file(path);
-    if (s) return s;
-
-    // Try WebP
-    return load_webp_file(path);
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return nullptr;
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
+    if (data.size() > cfg_.max_image_bytes) return nullptr;
+    return load_from_memory(data.data(), data.size());
 }
 
+// load_jpeg_file and load_webp_file are kept for ABI compatibility but delegate
+// to the in-memory versions.
 cairo_surface_t* ImageCache::load_jpeg_file(const std::string& path) {
-    struct SafeErr {
-        jpeg_error_mgr pub;
-        jmp_buf jmpbuf;
-    };
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return nullptr;
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
+    if (data.size() > cfg_.max_image_bytes) return nullptr;
+    return load_jpeg_mem(data.data(), data.size());
+}
+
+cairo_surface_t* ImageCache::load_webp_file(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return nullptr;
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
+    if (data.size() > cfg_.max_image_bytes) return nullptr;
+    return load_webp_mem(data.data(), data.size());
+}
+
+// ── data: URI support ─────────────────────────────────────────────────────────
+
+cairo_surface_t* ImageCache::load_data_uri(const std::string& uri) {
+    // Format: data:[<mediatype>][;base64],<data>
+    auto comma = uri.find(',');
+    if (comma == std::string::npos) return nullptr;
+
+    std::string header = uri.substr(5, comma - 5);  // skip "data:"
+    bool is_base64 = header.find(";base64") != std::string::npos;
+    if (!is_base64) return nullptr;  // only base64-encoded data URIs are supported
+
+    std::vector<uint8_t> raw = base64_decode(uri.substr(comma + 1));
+    if (raw.empty() || raw.size() > cfg_.max_image_bytes) return nullptr;
+
+    return load_from_memory(raw.data(), raw.size());
+}
+
+// Detect image format by magic bytes and route to the appropriate decoder.
+cairo_surface_t* ImageCache::load_from_memory(const uint8_t* data, size_t size) {
+    if (size < 4) return nullptr;
+
+    // PNG: 8-byte signature \x89PNG\r\n\x1a\n
+    if (size >= 8 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
+        struct PngCtx { const uint8_t* p; size_t pos; size_t size; };
+        PngCtx ctx{data, 0, size};
+        auto read_fn = [](void* closure, unsigned char* buf, unsigned int len) -> cairo_status_t {
+            auto* c = static_cast<PngCtx*>(closure);
+            if (c->pos + len > c->size) return CAIRO_STATUS_READ_ERROR;
+            std::memcpy(buf, c->p + c->pos, len);
+            c->pos += len;
+            return CAIRO_STATUS_SUCCESS;
+        };
+        cairo_surface_t* s = cairo_image_surface_create_from_png_stream(read_fn, &ctx);
+        if (cairo_surface_status(s) == CAIRO_STATUS_SUCCESS) return s;
+        cairo_surface_destroy(s);
+        return nullptr;
+    }
+
+    // JPEG: \xFF\xD8\xFF
+    if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+        return load_jpeg_mem(data, size);
+
+    // WebP: RIFF....WEBP
+    if (size >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' &&
+        data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P')
+        return load_webp_mem(data, size);
+
+    return nullptr;
+}
+
+cairo_surface_t* ImageCache::load_jpeg_mem(const uint8_t* data, size_t size) {
+    struct SafeErr { jpeg_error_mgr pub; jmp_buf jmpbuf; };
     static auto err_exit = [](j_common_ptr c) {
         longjmp(reinterpret_cast<SafeErr*>(c->err)->jmpbuf, 1);
     };
-
-    FILE* f = fopen(path.c_str(), "rb");
-    if (!f) return nullptr;
 
     jpeg_decompress_struct cinfo{};
     SafeErr jerr{};
@@ -129,12 +187,11 @@ cairo_surface_t* ImageCache::load_jpeg_file(const std::string& path) {
 
     if (setjmp(jerr.jmpbuf)) {
         jpeg_destroy_decompress(&cinfo);
-        fclose(f);
         return nullptr;
     }
 
     jpeg_create_decompress(&cinfo);
-    jpeg_stdio_src(&cinfo, f);
+    jpeg_mem_src(&cinfo, data, static_cast<unsigned long>(size));
     jpeg_read_header(&cinfo, TRUE);
     cinfo.out_color_space = JCS_RGB;
     jpeg_start_decompress(&cinfo);
@@ -161,19 +218,12 @@ cairo_surface_t* ImageCache::load_jpeg_file(const std::string& path) {
     cairo_surface_mark_dirty(surf);
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
-    fclose(f);
     return surf;
 }
 
-cairo_surface_t* ImageCache::load_webp_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return nullptr;
-    std::string data((std::istreambuf_iterator<char>(f)), {});
-    if (data.size() > cfg_.max_image_bytes) return nullptr;
-
+cairo_surface_t* ImageCache::load_webp_mem(const uint8_t* data, size_t size) {
     int w = 0, h = 0;
-    uint8_t* rgba = WebPDecodeRGBA(
-        reinterpret_cast<const uint8_t*>(data.data()), data.size(), &w, &h);
+    uint8_t* rgba = WebPDecodeRGBA(data, size, &w, &h);
     if (!rgba) return nullptr;
 
     cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
@@ -187,7 +237,6 @@ cairo_surface_t* ImageCache::load_webp_file(const std::string& path) {
         for (int x = 0; x < w; ++x) {
             uint8_t r = src[x*4+0], g = src[x*4+1],
                     b = src[x*4+2], a = src[x*4+3];
-            // Premultiply alpha for CAIRO_FORMAT_ARGB32
             out[x*4+0] = static_cast<uint8_t>((b * a + 127) / 255);
             out[x*4+1] = static_cast<uint8_t>((g * a + 127) / 255);
             out[x*4+2] = static_cast<uint8_t>((r * a + 127) / 255);
@@ -216,22 +265,6 @@ cairo_surface_t* ImageCache::load_http(const std::string& url) {
     if (!res || res->status != 200) return nullptr;
     if (res->body.size() > cfg_.max_image_bytes) return nullptr;
 
-    // RAII wrapper ensures temp file is removed on return or throw
-    struct TempFile {
-        std::string path;
-        ~TempFile() { if (!path.empty()) fs::remove(path); }
-    };
-
-    // Unique temp file per call to avoid concurrent races
-    auto uid = std::chrono::steady_clock::now().time_since_epoch().count();
-    std::mt19937_64 rng(uid ^ reinterpret_cast<uintptr_t>(&url));
-    TempFile tmp;
-    tmp.path = (fs::temp_directory_path() /
-        ("pylitehtml_" + std::to_string(rng()) + ".tmp")).string();
-    {
-        std::ofstream out(tmp.path, std::ios::binary);
-        if (!out) return nullptr;
-        out.write(res->body.data(), res->body.size());
-    }
-    return load_file(tmp.path);  // tmp.~TempFile() cleans up on return or throw
+    return load_from_memory(
+        reinterpret_cast<const uint8_t*>(res->body.data()), res->body.size());
 }

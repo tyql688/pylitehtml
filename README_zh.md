@@ -42,7 +42,7 @@ with open("output.png", "wb") as f:
 
 ---
 
-### `class Renderer(width=800, default_font="Noto Sans", default_font_size=16, extra_fonts=[], image_cache_max_bytes=67108864, image_timeout_ms=5000, image_max_bytes=10485760, allow_http_images=True)`
+### `class Renderer(width=800, default_font="Noto Sans", default_font_size=16, extra_fonts=[], image_cache_max_bytes=67108864, image_timeout_ms=5000, image_max_bytes=10485760, allow_http_images=True, dpi=96.0, lang="en", culture="en-US")`
 
 可复用渲染器。创建一次，多次调用 `.render()`，线程安全。
 
@@ -56,10 +56,22 @@ with open("output.png", "wb") as f:
 | `image_timeout_ms` | `int` | `5000` | HTTP 图片获取超时（毫秒） |
 | `image_max_bytes` | `int` | `10485760` | 单张图片最大字节数（10 MB） |
 | `allow_http_images` | `bool` | `True` | 是否允许通过 HTTP/HTTPS 获取图片 |
+| `dpi` | `float` | `96.0` | 屏幕 DPI，影响 `pt` 单位换算及媒体查询 |
+| `lang` | `str` | `"en"` | BCP 47 语言标签（如 `"zh"`、`"ja"`） |
+| `culture` | `str` | `"en-US"` | 区域文化字符串（如 `"zh-CN"`） |
 
-#### `Renderer.render(html, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85)`
+#### `Renderer.render(html, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85, allow_refit=False)`
 
 渲染 HTML 并返回图像数据。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `html` | `str` | — | 要渲染的 HTML 源码 |
+| `base_url` | `str` | `""` | 解析相对资源的基础 URL |
+| `height` | `int` | `0` | 固定高度（0 表示自动） |
+| `fmt` | `OutputFormat` | `PNG` | 输出格式 |
+| `quality` | `int` | `85` | JPEG 质量（1–100，PNG/RAW 忽略） |
+| `allow_refit` | `bool` | `False` | 若内容宽度小于视口，则以内容宽度重新渲染 |
 
 返回 PNG/JPEG 时为 `bytes`，RAW 时为 `RawResult`。
 
@@ -145,6 +157,50 @@ renderer = Renderer(
 )
 ```
 
+### 内联图片（data: URI）
+
+```python
+import base64
+from pylitehtml import Renderer
+
+with open("logo.png", "rb") as f:
+    b64 = base64.b64encode(f.read()).decode()
+
+html = f'<img src="data:image/png;base64,{b64}" width="100" height="50">'
+png = Renderer(width=400).render(html)
+```
+
+### 高 DPI / 视网膜屏渲染
+
+```python
+from pylitehtml import Renderer
+
+# 192 DPI 会将 pt 单位的尺寸加倍，适合 HiDPI/Retina 输出
+renderer = Renderer(width=800, dpi=192.0)
+png = renderer.render("<p style='font-size:12pt'>你好</p>")
+```
+
+### 本地化渲染
+
+```python
+from pylitehtml import Renderer
+
+renderer = Renderer(width=800, lang="zh", culture="zh-CN")
+png = renderer.render("<p>你好，世界</p>")
+```
+
+### 宽度自适应（allow_refit）
+
+```python
+from pylitehtml import Renderer, OutputFormat
+
+renderer = Renderer(width=800)
+# 若内容边界框宽度小于 800px，输出图像将自动收窄
+raw = renderer.render("<table><tr><td>你好</td></tr></table>",
+                      fmt=OutputFormat.RAW, allow_refit=True)
+print(raw.width, raw.height)  # 可能小于 800
+```
+
 ### 转换为 PIL 图像
 
 ```python
@@ -191,7 +247,7 @@ arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
 ## 已知限制
 
 - **不支持 JavaScript** — 仅静态 HTML+CSS
-- **不发起网络请求** — 外部图片/样式表须内联或通过本地服务提供
+- **不发起网络请求** — 外部图片/样式表须内联或通过本地服务提供；可使用 `data:` URI 嵌入资源
 - **不支持 SVG** — SVG 图像不会被渲染
 - **CSS 子集** — 基于 [litehtml](https://github.com/litehtml/litehtml)；部分高级 CSS 特性（如 Grid、Flexbox）支持不完整
 

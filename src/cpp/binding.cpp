@@ -31,12 +31,15 @@ struct ImageFetchError: std::runtime_error { using runtime_error::runtime_error;
 
 class Renderer {
 public:
-    // DPI is fixed at 96 for v1. High-DPI rendering is not yet supported.
     Renderer(int width, std::string default_font, int default_font_size,
              std::vector<std::string> extra_fonts,
              size_t image_cache_max_bytes, int image_timeout_ms,
-             size_t image_max_bytes, bool allow_http_images)
+             size_t image_max_bytes, bool allow_http_images,
+             float dpi, std::string lang, std::string culture)
         : width_(width)
+        , dpi_(dpi > 0 ? dpi : 96.0f)
+        , lang_(std::move(lang))
+        , culture_(std::move(culture))
         , fm_(FontManager::Config{
               fonts_dir_from_module().string(),
               std::move(default_font),
@@ -50,16 +53,16 @@ public:
     {}
 
     py::object render(const std::string& html, const std::string& base_url,
-                      int height, OutputFormat fmt, int quality) {
+                      int height, OutputFormat fmt, int quality, bool allow_refit) {
         // Release the GIL only for the CPU-heavy rendering work.
         // py::bytes / py::cast must be constructed while holding the GIL.
         std::vector<uint8_t> buf;
         int surf_w = 0, surf_h = 0;
         {
             py::gil_scoped_release release;
-            PyContainer container(fm_, ic_, width_);
+            PyContainer container(fm_, ic_, width_, dpi_, lang_, culture_);
             try {
-                container.render(html, base_url, height);
+                container.render(html, base_url, height, allow_refit);
             } catch (const std::exception& e) {
                 throw RenderError(e.what());
             }
@@ -86,6 +89,9 @@ public:
 
 private:
     int         width_;
+    float       dpi_;
+    std::string lang_;
+    std::string culture_;
     FontManager fm_;
     ImageCache  ic_;
 };
@@ -109,7 +115,7 @@ PYBIND11_MODULE(_core, m) {
 
     py::class_<Renderer>(m, "Renderer")
         .def(py::init<int,std::string,int,std::vector<std::string>,
-                      size_t,int,size_t,bool>(),
+                      size_t,int,size_t,bool,float,std::string,std::string>(),
              py::arg("width"),
              py::arg("default_font")          = "Noto Sans",
              py::arg("default_font_size")     = 16,
@@ -117,13 +123,17 @@ PYBIND11_MODULE(_core, m) {
              py::arg("image_cache_max_bytes") = 64*1024*1024,
              py::arg("image_timeout_ms")      = 5000,
              py::arg("image_max_bytes")       = 10*1024*1024,
-             py::arg("allow_http_images")     = true)
+             py::arg("allow_http_images")     = true,
+             py::arg("dpi")                   = 96.0f,
+             py::arg("lang")                  = "en",
+             py::arg("culture")               = "en-US")
         .def("render", &Renderer::render,
              py::arg("html"),
-             py::arg("base_url") = "",
-             py::arg("height")   = 0,
-             py::arg("fmt")      = OutputFormat::PNG,
-             py::arg("quality")  = 85);
+             py::arg("base_url")    = "",
+             py::arg("height")      = 0,
+             py::arg("fmt")         = OutputFormat::PNG,
+             py::arg("quality")     = 85,
+             py::arg("allow_refit") = false);
 
     // Note: this convenience function constructs a full Renderer (including
     // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
@@ -131,8 +141,9 @@ PYBIND11_MODULE(_core, m) {
     m.def("render",
         [](const std::string& html, int width, const std::string& base_url,
            int height, OutputFormat fmt, int quality) -> py::object {
-            Renderer r(width,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,true);
-            return r.render(html, base_url, height, fmt, quality);
+            Renderer r(width,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,
+                       true,96.0f,"en","en-US");
+            return r.render(html, base_url, height, fmt, quality, false);
         },
         py::arg("html"), py::arg("width"),
         py::arg("base_url") = "", py::arg("height") = 0,

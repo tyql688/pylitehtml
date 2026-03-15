@@ -36,6 +36,10 @@ private:
     cairo_surface_t* load_jpeg_file(const std::string& path);
     cairo_surface_t* load_webp_file(const std::string& path);
     cairo_surface_t* load_http(const std::string& url);
+    cairo_surface_t* load_data_uri(const std::string& uri);
+    cairo_surface_t* load_from_memory(const uint8_t* data, size_t size);
+    cairo_surface_t* load_jpeg_mem(const uint8_t* data, size_t size);
+    cairo_surface_t* load_webp_mem(const uint8_t* data, size_t size);
     void evict_to_fit(size_t needed);  // call under exclusive lock
 
     Config cfg_;

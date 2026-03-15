@@ -42,7 +42,7 @@ Returns `bytes` (PNG or JPEG) or `RawResult` (RAW).
 
 ---
 
-### `class Renderer(width=800, default_font="Noto Sans", default_font_size=16, extra_fonts=[], image_cache_max_bytes=67108864, image_timeout_ms=5000, image_max_bytes=10485760, allow_http_images=True)`
+### `class Renderer(width=800, default_font="Noto Sans", default_font_size=16, extra_fonts=[], image_cache_max_bytes=67108864, image_timeout_ms=5000, image_max_bytes=10485760, allow_http_images=True, dpi=96.0, lang="en", culture="en-US")`
 
 Reusable renderer. Create once, call `.render()` many times. Thread-safe.
 
@@ -56,10 +56,22 @@ Reusable renderer. Create once, call `.render()` many times. Thread-safe.
 | `image_timeout_ms` | `int` | `5000` | HTTP image fetch timeout in milliseconds |
 | `image_max_bytes` | `int` | `10485760` | Max size per image in bytes (10 MB) |
 | `allow_http_images` | `bool` | `True` | Whether to fetch images over HTTP/HTTPS |
+| `dpi` | `float` | `96.0` | Screen DPI for `pt` unit conversion and media queries |
+| `lang` | `str` | `"en"` | BCP 47 language tag (e.g. `"zh"`, `"ja"`) |
+| `culture` | `str` | `"en-US"` | Culture/locale string (e.g. `"zh-CN"`) |
 
-#### `Renderer.render(html, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85)`
+#### `Renderer.render(html, *, base_url="", height=0, fmt=OutputFormat.PNG, quality=85, allow_refit=False)`
 
 Render HTML and return image data.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `html` | `str` | — | HTML source to render |
+| `base_url` | `str` | `""` | Base URL for resolving relative resources |
+| `height` | `int` | `0` | Fixed height in pixels (0 = auto) |
+| `fmt` | `OutputFormat` | `PNG` | Output format |
+| `quality` | `int` | `85` | JPEG quality (1–100, ignored for PNG/RAW) |
+| `allow_refit` | `bool` | `False` | Re-render at content width if content is narrower than viewport |
 
 Returns `bytes` for PNG/JPEG, or `RawResult` for RAW.
 
@@ -140,10 +152,53 @@ from pylitehtml import Renderer
 
 renderer = Renderer(
     width=800,
-    fonts_dir="/path/to/my/fonts",   # directory with .ttf/.otf files
     default_font="My Custom Font",
     extra_fonts=["/path/to/extra.ttf"],
 )
+```
+
+### Inline Images (data: URIs)
+
+```python
+import base64
+from pylitehtml import Renderer
+
+with open("logo.png", "rb") as f:
+    b64 = base64.b64encode(f.read()).decode()
+
+html = f'<img src="data:image/png;base64,{b64}" width="100" height="50">'
+png = Renderer(width=400).render(html)
+```
+
+### High-DPI / Retina Rendering
+
+```python
+from pylitehtml import Renderer
+
+# 192 DPI doubles pt-based sizes — good for HiDPI/Retina outputs
+renderer = Renderer(width=800, dpi=192.0)
+png = renderer.render("<p style='font-size:12pt'>Hello</p>")
+```
+
+### Locale-Aware Rendering
+
+```python
+from pylitehtml import Renderer
+
+renderer = Renderer(width=800, lang="zh", culture="zh-CN")
+png = renderer.render("<p>你好，世界</p>")
+```
+
+### Width Auto-Refit
+
+```python
+from pylitehtml import Renderer, OutputFormat
+
+renderer = Renderer(width=800)
+# If content bounding box is narrower than 800px, the output image shrinks to fit
+raw = renderer.render("<table><tr><td>Hello</td></tr></table>",
+                      fmt=OutputFormat.RAW, allow_refit=True)
+print(raw.width, raw.height)  # may be narrower than 800
 ```
 
 ### Convert to PIL Image
@@ -192,7 +247,7 @@ arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
 ## Known Limitations
 
 - **No JavaScript** — static HTML+CSS only
-- **No network requests** — external images/stylesheets must be inlined or served locally
+- **No network requests** — external images/stylesheets must be inlined or served locally; use `data:` URIs to embed assets
 - **No SVG** — SVG images are not rendered
 - **CSS subset** — powered by [litehtml](https://github.com/litehtml/litehtml); some advanced CSS features (e.g., CSS Grid, Flexbox) may have incomplete support
 
