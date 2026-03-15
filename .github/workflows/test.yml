@@ -35,7 +35,6 @@ jobs:
     runs-on: windows-latest
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     strategy:
       matrix:
         python: ["3.10"]
@@ -53,30 +52,27 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: "b02e341c927f16d991edbd915d8ea43eac52096c"  # 2025.01.16
-          vcpkgDirectory: "${{ runner.workspace }}/b/vcpkg"
-          # Don't use runVcpkgInstall: the glob "**/vcpkg.json" hits hundreds of
-          # port files inside vcpkg itself and never installs our packages.
-          # We run vcpkg install explicitly below.
+      - name: Bootstrap vcpkg
+        run: |
+          $vcpkg = Join-Path "${{ runner.workspace }}" "b\vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $vcpkg
+          & (Join-Path $vcpkg "bootstrap-vcpkg.bat") -disableMetrics
+          Add-Content $env:GITHUB_ENV "VCPKG_ROOT=$vcpkg"
+        shell: pwsh
 
       - name: Install vcpkg dependencies
         run: |
-          $exe  = Join-Path "${{ runner.workspace }}" "b\vcpkg\vcpkg.exe"
-          $root = Join-Path "${{ runner.workspace }}" "b\vcpkg\installed"
-          # Manifest mode: no package args allowed; use --x-install-root to write
-          # to vcpkg_root/installed/ instead of the default ./vcpkg_installed/
+          $exe  = Join-Path "$env:VCPKG_ROOT" "vcpkg.exe"
+          $root = Join-Path "$env:VCPKG_ROOT" "installed"
           & $exe install --triplet x64-windows --x-install-root $root
         shell: pwsh
 
       - name: Configure build environment
         run: |
-          $vcpkg     = Join-Path "${{ runner.workspace }}" "b\vcpkg"
-          $installed = Join-Path $vcpkg "installed\x64-windows"
+          $installed = Join-Path "$env:VCPKG_ROOT" "installed\x64-windows"
           $bin       = Join-Path $installed "bin"
           $pkgconf   = Join-Path $installed "tools\pkgconf"
-          $toolchain = Join-Path $vcpkg "scripts\buildsystems\vcpkg.cmake"
+          $toolchain = Join-Path "$env:VCPKG_ROOT" "scripts\buildsystems\vcpkg.cmake"
           Write-Host "vcpkg bin exists: $(Test-Path $bin)"
           Write-Host "DLL count: $((Get-ChildItem $bin -Filter '*.dll' -ErrorAction SilentlyContinue).Count)"
           Add-Content $env:GITHUB_PATH $pkgconf

@@ -38,7 +38,7 @@ add_subdirectory(third_party/litehtml)
 find_package(pybind11 CONFIG REQUIRED)
 
 # ── Extension module ─────────────────────────────────────────────────────────
-pybind11_add_module(_core
+pybind11_add_module(_core MODULE
   src/cpp/binding.cpp
   src/cpp/image_cache.cpp
   src/cpp/font_manager.cpp
