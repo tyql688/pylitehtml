@@ -201,20 +201,45 @@ arr = np.frombuffer(raw.data, dtype=np.uint8).reshape(raw.height, raw.width, 4)
 
 ## 从源码构建
 
-**依赖项：** Cairo、Pango、FontConfig、libwebp、libjpeg-turbo、CMake、Ninja、pybind11
+### 系统依赖
+
+**Ubuntu / Debian**
+```bash
+sudo apt-get update
+sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev \
+  libwebp-dev libjpeg-turbo8-dev cmake ninja-build pkg-config
+```
+
+**Fedora / RHEL / CentOS**
+```bash
+sudo dnf install -y cairo-devel pango-devel fontconfig-devel \
+  libwebp-devel libjpeg-turbo-devel cmake ninja-build pkgconf
+```
+
+**macOS（Homebrew）**
+```bash
+brew install cairo pango fontconfig webp jpeg-turbo cmake ninja
+```
+> 提示：macOS 上请使用 Apple 自带的 clang（而非 Homebrew LLVM），避免 C++ ABI 问题：
+> `CC=/usr/bin/clang CXX=/usr/bin/clang++ pip install -e . --no-build-isolation`
+
+**Windows**
+
+需要 [vcpkg](https://github.com/microsoft/vcpkg) 和 Visual Studio 2019+。
+完整的 CI 构建脚本见 [`.github/workflows/test.yml`](.github/workflows/test.yml)。
+
+### 构建
 
 ```bash
-# Linux
-sudo apt-get install libcairo2-dev libpango1.0-dev libfontconfig1-dev \
-  libwebp-dev libjpeg-turbo8-dev cmake ninja-build
+# 推荐使用虚拟环境
+uv venv .venv && uv pip install scikit-build-core pybind11 pytest pillow
 
-# macOS
-brew install cairo pango fontconfig webp jpeg-turbo cmake ninja
-
-# 构建
-pip install scikit-build-core pybind11
+# 以可编辑模式安装
+# macOS：如使用 Homebrew LLVM，请在前面加 CC=/usr/bin/clang CXX=/usr/bin/clang++
 pip install -e . --no-build-isolation
-pytest tests/
+
+# 运行测试
+pytest tests/ -v
 ```
 
 ## 基于
