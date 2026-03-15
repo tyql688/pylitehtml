@@ -7,7 +7,7 @@ name = "pylitehtml"
 version = "0.1.0"
 description = "HTML+CSS to image renderer based on litehtml"
 readme = "README.md"
-license = { text = "BSD-3-Clause" }
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []
 classifiers = [
@@ -16,7 +16,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
-  "License :: OSI Approved :: BSD Software License",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Topic :: Multimedia :: Graphics",
 ]

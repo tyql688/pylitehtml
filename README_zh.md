@@ -227,4 +227,4 @@ pytest tests/
 
 ## 许可证
 
-BSD-3-Clause
+MIT

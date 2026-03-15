@@ -228,4 +228,4 @@ pytest tests/
 
 ## License
 
-BSD-3-Clause
+MIT
