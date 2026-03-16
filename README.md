@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/tyql688/pylitehtml/actions/workflows/test.yml/badge.svg)
 
-HTML+CSS → PNG/JPEG 图像渲染器。轻量级，无需无头浏览器，线程安全。
+HTML+CSS → PNG/JPEG 图像渲染器。轻量级，无需无头浏览器，线程安全。需要 Python ≥ 3.12。
 
 
 ## 安装
@@ -205,6 +205,6 @@ pytest tests/ -v
 
 ## 基于
 
-[litehtml](https://github.com/litehtml/litehtml) · [Cairo](https://www.cairographics.org/) · [Pango](https://pango.gnome.org/) · [FontConfig](https://www.freedesktop.org/wiki/Software/fontconfig/) · [pybind11](https://github.com/pybind/pybind11)
+[litehtml](https://github.com/litehtml/litehtml) · [Cairo](https://www.cairographics.org/) · [Pango](https://pango.gnome.org/) · [FontConfig](https://www.freedesktop.org/wiki/Software/fontconfig/) · [nanobind](https://github.com/wjakob/nanobind)
 
 MIT License
