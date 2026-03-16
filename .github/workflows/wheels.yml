@@ -32,18 +32,6 @@ jobs:
           & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install --triplet x64-windows-static
         shell: pwsh
 
-      - name: Bootstrap vcpkg (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git "${{ runner.workspace }}/b/vcpkg"
-          "${{ runner.workspace }}/b/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
-          echo "VCPKG_ROOT=${{ runner.workspace }}/b/vcpkg" >> $GITHUB_ENV
-
-      - name: vcpkg deps (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          "$VCPKG_ROOT/vcpkg" install --triplet arm64-osx
-
       - uses: pypa/cibuildwheel@v2.23
         env:
           CIBW_BUILD: "cp312-*"   # build with Python 3.12; STABLE_ABI + wheel.py-api produce abi3 tag
@@ -54,6 +42,8 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: |
             dnf install -y cairo-devel pango-devel fontconfig-devel \
               libwebp-devel libjpeg-turbo-devel
+          CIBW_BEFORE_ALL_MACOS: >
+            brew install cairo pango fontconfig webp jpeg-turbo pkg-config 2>/dev/null || true
           CIBW_REPAIR_WHEEL_COMMAND_LINUX:   "auditwheel repair -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_MACOS:   "delocate-wheel -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: "delvewheel repair -w {dest_dir} {wheel}"
