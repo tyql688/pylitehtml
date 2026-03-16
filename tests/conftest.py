@@ -22,5 +22,5 @@ def renderer() -> Renderer:
     return Renderer(width=800)
 
 @pytest.fixture
-def simple_html():
+def simple_html() -> str:
     return SIMPLE_HTML
