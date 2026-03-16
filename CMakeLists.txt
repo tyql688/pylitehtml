@@ -35,7 +35,7 @@ set(LITEHTML_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/litehtml)
 
 # ── nanobind ─────────────────────────────────────────────────────────────────
-find_package(Python COMPONENTS Interpreter Development REQUIRED)
+find_package(Python COMPONENTS Interpreter Development.Module Development.SABIModule REQUIRED)
 find_package(nanobind CONFIG REQUIRED)
 
 # ── Extension module ─────────────────────────────────────────────────────────
