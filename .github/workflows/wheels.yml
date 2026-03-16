@@ -29,7 +29,21 @@ jobs:
       - name: vcpkg deps (Windows)
         if: runner.os == 'Windows'
         run: |
-          & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install --triplet x64-windows-static
+          & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install --triplet x64-windows
+        shell: pwsh
+
+      - name: Configure Windows build environment
+        if: runner.os == 'Windows'
+        run: |
+          $installed = Join-Path "$env:VCPKG_ROOT" "installed\x64-windows"
+          $bin       = Join-Path $installed "bin"
+          $pkgconf   = Join-Path $installed "tools\pkgconf"
+          $toolchain = Join-Path "$env:VCPKG_ROOT" "scripts\buildsystems\vcpkg.cmake"
+          Add-Content $env:GITHUB_PATH $pkgconf
+          Add-Content $env:GITHUB_PATH $bin
+          Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
+          Add-Content $env:GITHUB_ENV "VCPKG_BIN=$bin"
+          Add-Content $env:GITHUB_ENV "SKBUILD_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$toolchain"
         shell: pwsh
 
       - name: Pre-cache virtualenv for cibuildwheel
@@ -68,7 +82,9 @@ jobs:
             brew install cairo pango fontconfig webp jpeg-turbo pkg-config 2>/dev/null || true
           CIBW_REPAIR_WHEEL_COMMAND_LINUX:   "auditwheel repair -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_MACOS:   "delocate-wheel --require-target-macos-version 15.0 -w {dest_dir} {wheel}"
-          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: "delvewheel repair -w {dest_dir} {wheel}"
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+            delvewheel repair -w {dest_dir} {wheel}
+            --add-path "$VCPKG_BIN"
           CIBW_TEST_REQUIRES: "pytest pillow pytest-asyncio"
           CIBW_TEST_COMMAND: "pytest {project}/tests/test_basic.py {project}/tests/test_async.py -v"
 
