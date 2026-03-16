@@ -193,7 +193,7 @@ cairo_surface_t* ImageCache::load_jpeg_mem(const uint8_t* data, size_t size) {
     }
 
     jpeg_create_decompress(&cinfo);
-    jpeg_mem_src(&cinfo, data, static_cast<unsigned long>(size));
+    jpeg_mem_src(&cinfo, const_cast<unsigned char*>(data), static_cast<unsigned long>(size));
     jpeg_read_header(&cinfo, TRUE);
     cinfo.out_color_space = JCS_RGB;
     jpeg_start_decompress(&cinfo);
@@ -246,7 +246,7 @@ cairo_surface_t* ImageCache::load_webp_mem(const uint8_t* data, size_t size) {
         }
     }
     cairo_surface_mark_dirty(surf);
-    WebPFree(rgba);
+    free(rgba);  // WebPDecodeRGBA uses malloc; free() works on all libwebp versions
     return surf;
 }
 
