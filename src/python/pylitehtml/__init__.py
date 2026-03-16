@@ -20,16 +20,13 @@ Quick start::
     # One-shot async (no renderer reuse)
     png = await pylitehtml.render_async("<h1>Hello</h1>", width=800)
 """
-from __future__ import annotations
-
 import asyncio
 import os
 import sys
-from typing import Union
 
 # Windows: Python 3.8+ no longer searches PATH for DLLs when loading extension
 # modules. Add vcpkg/system DLL directories before importing _core.
-if sys.platform == "win32":
+if sys.platform == "win32":  # pyright: ignore[reportUnnecessaryComparison]
     # 1. Bundled DLLs (production wheels, placed by delvewheel)
     _dll_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dlls")
     if os.path.isdir(_dll_dir):
@@ -63,7 +60,7 @@ __all__ = [
 ]
 
 
-def _resolve_fmt(fmt: "str | OutputFormat") -> OutputFormat:
+def _resolve_fmt(fmt: str | OutputFormat) -> OutputFormat:
     if isinstance(fmt, OutputFormat):
         return fmt
     _map = {"png": OutputFormat.PNG, "jpeg": OutputFormat.JPEG, "raw": OutputFormat.RAW}
@@ -73,7 +70,7 @@ def _resolve_fmt(fmt: "str | OutputFormat") -> OutputFormat:
         raise ValueError(f"Unknown fmt {fmt!r}. Use 'png', 'jpeg', 'raw', or OutputFormat.")
 
 
-def _split_locale(locale: str) -> "tuple[str, str]":
+def _split_locale(locale: str) -> tuple[str, str]:
     """'zh-CN' -> ('zh', 'zh-CN');  'en' -> ('en', 'en')"""
     lang = locale.split("-", 1)[0]
     return lang, locale
@@ -102,7 +99,7 @@ class Renderer:
         *,
         default_font: str = "Noto Sans",
         default_font_size: int = 16,
-        extra_fonts: "list[str] | None" = None,
+        extra_fonts: list[str] | None = None,
         image_cache_mb: float = 64.0,
         image_timeout_ms: int = 5_000,
         image_max_mb: float = 10.0,
@@ -167,10 +164,10 @@ class Renderer:
         *,
         base_url: str = "",
         height: int = 0,
-        fmt: "str | OutputFormat" = OutputFormat.PNG,
+        fmt: str | OutputFormat = OutputFormat.PNG,
         quality: int = 85,
         shrink_to_fit: bool = False,
-    ) -> "bytes | RawResult":
+    ) -> bytes | RawResult:
         """
         Render HTML and return image data.
 
@@ -217,10 +214,10 @@ class Renderer:
         *,
         base_url: str = "",
         height: int = 0,
-        fmt: "str | OutputFormat" = OutputFormat.PNG,
+        fmt: str | OutputFormat = OutputFormat.PNG,
         quality: int = 85,
         shrink_to_fit: bool = False,
-    ) -> "bytes | RawResult":
+    ) -> bytes | RawResult:
         """
         Async render — runs in the default thread-pool via ``asyncio.to_thread``.
 
@@ -266,10 +263,10 @@ def render(
     *,
     base_url: str = "",
     height: int = 0,
-    fmt: "str | OutputFormat" = OutputFormat.PNG,
+    fmt: str | OutputFormat = OutputFormat.PNG,
     quality: int = 85,
     shrink_to_fit: bool = False,
-) -> "bytes | RawResult":
+) -> bytes | RawResult:
     """
     One-shot convenience function — creates a temporary :class:`Renderer`.
 
@@ -317,10 +314,10 @@ async def render_async(
     *,
     base_url: str = "",
     height: int = 0,
-    fmt: "str | OutputFormat" = OutputFormat.PNG,
+    fmt: str | OutputFormat = OutputFormat.PNG,
     quality: int = 85,
     shrink_to_fit: bool = False,
-) -> "bytes | RawResult":
+) -> bytes | RawResult:
     """
     Async one-shot convenience function.
 

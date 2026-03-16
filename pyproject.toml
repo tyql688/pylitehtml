@@ -32,6 +32,9 @@ cmake.verbose = true
 [tool.scikit-build.cmake.define]
 LITEHTML_BUILD_TESTING = "OFF"
 
+[tool.ruff]
+target-version = "py312"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
