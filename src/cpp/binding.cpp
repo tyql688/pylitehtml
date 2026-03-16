@@ -1,27 +1,28 @@
 // src/cpp/binding.cpp
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #include <filesystem>
 #include "font_manager.h"
 #include "image_cache.h"
 #include "py_container.h"
 #include "encode.h"
 
-namespace py = pybind11;
+namespace nb = nanobind;
 namespace fs = std::filesystem;
 
 static fs::path fonts_dir_from_module() {
     // _core.so lives at pylitehtml/_core.so; fonts/ is at pylitehtml/fonts/
-    py::object this_mod = py::module_::import("pylitehtml._core");
-    std::string so_path = py::cast<std::string>(
-        py::getattr(this_mod, "__file__", py::str("")));
+    nb::object this_mod = nb::module_::import_("pylitehtml._core");
+    std::string so_path = nb::cast<std::string>(
+        nb::getattr(this_mod, "__file__", nb::str("")));
     return fs::path(so_path).parent_path() / "fonts";
 }
 
 enum class OutputFormat { PNG = 0, JPEG = 1, RAW = 2 };
 
 struct RawResult {
-    py::bytes data;
+    nb::bytes data;
     int width;
     int height;
 };
@@ -53,14 +54,14 @@ public:
               allow_http_images})
     {}
 
-    py::object render(const std::string& html, const std::string& base_url,
+    nb::object render(const std::string& html, const std::string& base_url,
                       int height, OutputFormat fmt, int quality, bool shrink_to_fit) {
         // Release the GIL only for the CPU-heavy rendering work.
-        // py::bytes / py::cast must be constructed while holding the GIL.
+        // nb::bytes / nb::cast must be constructed while holding the GIL.
         std::vector<uint8_t> buf;
         int surf_w = 0, surf_h = 0;
         {
-            py::gil_scoped_release release;
+            nb::gil_scoped_release release;
             PyContainer container(fm_, ic_, width_, dpi_, device_height_, lang_, culture_);
             try {
                 container.render(html, base_url, height, shrink_to_fit);
@@ -77,13 +78,13 @@ public:
             }
         }
         // GIL re-acquired here — safe to construct Python objects
-        auto pybytes = py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+        auto pybytes = nb::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
         if (fmt == OutputFormat::RAW) {
             RawResult r;
             r.data   = std::move(pybytes);
             r.width  = surf_w;
             r.height = surf_h;
-            return py::cast(std::move(r));
+            return nb::cast(std::move(r));
         }
         return pybytes;
     }
@@ -98,60 +99,60 @@ private:
     ImageCache  ic_;
 };
 
-PYBIND11_MODULE(_core, m) {
+NB_MODULE(_core, m) {
     m.doc() = "pylitehtml: HTML+CSS to image renderer";
 
-    py::register_exception<RenderError>(m, "RenderError");
-    py::register_exception<ImageFetchError>(m, "ImageFetchError");
+    nb::exception<RenderError>(m, "RenderError");
+    nb::exception<ImageFetchError>(m, "ImageFetchError");
 
-    py::enum_<OutputFormat>(m, "OutputFormat")
+    nb::enum_<OutputFormat>(m, "OutputFormat")
         .value("PNG",  OutputFormat::PNG)
         .value("JPEG", OutputFormat::JPEG)
-        .value("RAW",  OutputFormat::RAW)
-        .export_values();
+        .value("RAW",  OutputFormat::RAW);
+        // Note: no .export_values() — nanobind doesn't pollute module scope
 
-    py::class_<RawResult>(m, "RawResult")
-        .def_readonly("data",   &RawResult::data)
-        .def_readonly("width",  &RawResult::width)
-        .def_readonly("height", &RawResult::height);
+    nb::class_<RawResult>(m, "RawResult")
+        .def_ro("data",   &RawResult::data)
+        .def_ro("width",  &RawResult::width)
+        .def_ro("height", &RawResult::height);
 
-    py::class_<Renderer>(m, "Renderer")
-        .def(py::init<int,std::string,int,std::vector<std::string>,
+    nb::class_<Renderer>(m, "Renderer")
+        .def(nb::init<int,std::string,int,std::vector<std::string>,
                       size_t,int,size_t,bool,float,int,std::string,std::string>(),
-             py::arg("width"),
-             py::arg("default_font")          = "Noto Sans",
-             py::arg("default_font_size")     = 16,
-             py::arg("extra_fonts")           = std::vector<std::string>{},
-             py::arg("image_cache_max_bytes") = 64*1024*1024,
-             py::arg("image_timeout_ms")      = 5000,
-             py::arg("image_max_bytes")       = 10*1024*1024,
-             py::arg("allow_http_images")     = true,
-             py::arg("dpi")                   = 96.0f,
-             py::arg("device_height")         = 600,
-             py::arg("lang")                  = "en",
-             py::arg("culture")               = "en-US")
+             nb::arg("width"),
+             nb::arg("default_font")          = "Noto Sans",
+             nb::arg("default_font_size")     = 16,
+             nb::arg("extra_fonts")           = std::vector<std::string>{},
+             nb::arg("image_cache_max_bytes") = 64*1024*1024,
+             nb::arg("image_timeout_ms")      = 5000,
+             nb::arg("image_max_bytes")       = 10*1024*1024,
+             nb::arg("allow_http_images")     = true,
+             nb::arg("dpi")                   = 96.0f,
+             nb::arg("device_height")         = 600,
+             nb::arg("lang")                  = "en",
+             nb::arg("culture")               = "en-US")
         .def("render", &Renderer::render,
-             py::arg("html"),
-             py::arg("base_url")    = "",
-             py::arg("height")      = 0,
-             py::arg("fmt")         = OutputFormat::PNG,
-             py::arg("quality")     = 85,
-             py::arg("shrink_to_fit") = false);
+             nb::arg("html"),
+             nb::arg("base_url")      = "",
+             nb::arg("height")        = 0,
+             nb::arg("fmt")           = OutputFormat::PNG,
+             nb::arg("quality")       = 85,
+             nb::arg("shrink_to_fit") = false);
 
     // Note: this convenience function constructs a full Renderer (including
     // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
     // use the Renderer class directly.
     m.def("render",
         [](const std::string& html, int width, const std::string& base_url,
-           int height, OutputFormat fmt, int quality, bool shrink_to_fit) -> py::object {
+           int height, OutputFormat fmt, int quality, bool shrink_to_fit) -> nb::object {
             Renderer r(width,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,
                        true,96.0f,600,"en","en-US");
             return r.render(html, base_url, height, fmt, quality, shrink_to_fit);
         },
-        py::arg("html"), py::arg("width"),
-        py::arg("base_url")      = "",
-        py::arg("height")        = 0,
-        py::arg("fmt")           = OutputFormat::PNG,
-        py::arg("quality")       = 85,
-        py::arg("shrink_to_fit") = false);
+        nb::arg("html"), nb::arg("width"),
+        nb::arg("base_url")      = "",
+        nb::arg("height")        = 0,
+        nb::arg("fmt")           = OutputFormat::PNG,
+        nb::arg("quality")       = 85,
+        nb::arg("shrink_to_fit") = false);
 }

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+requires = ["scikit-build-core>=0.9", "nanobind>=2.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -28,6 +28,7 @@ dev = ["pytest", "pillow", "numpy", "pytest-asyncio"]
 [tool.scikit-build]
 cmake.build-type = "Release"
 wheel.packages = ["src/python/pylitehtml"]
+wheel.py-api = "cp312"
 cmake.verbose = true
 
 [tool.scikit-build.cmake.define]

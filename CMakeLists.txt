@@ -34,11 +34,12 @@ endif()
 set(LITEHTML_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/litehtml)
 
-# ── pybind11 ─────────────────────────────────────────────────────────────────
-find_package(pybind11 CONFIG REQUIRED)
+# ── nanobind ─────────────────────────────────────────────────────────────────
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+find_package(nanobind CONFIG REQUIRED)
 
 # ── Extension module ─────────────────────────────────────────────────────────
-pybind11_add_module(_core MODULE
+nanobind_add_module(_core STABLE_ABI
   src/cpp/binding.cpp
   src/cpp/image_cache.cpp
   src/cpp/font_manager.cpp
@@ -80,6 +81,19 @@ endif()
 # stdc++fs on older Linux toolchains
 if(UNIX AND NOT APPLE)
   target_link_libraries(_core PRIVATE stdc++fs)
+endif()
+
+# macOS: when built with Homebrew LLVM, link the matching libc++ explicitly.
+# Homebrew LLVM's libc++ headers may use symbols (e.g. __hash_memory) not yet
+# present in the system libc++. Resolve the path relative to the compiler binary
+# so we pick the right libc++ regardless of the Homebrew prefix.
+if(APPLE)
+  get_filename_component(_cxx_bin_dir ${CMAKE_CXX_COMPILER} DIRECTORY)
+  get_filename_component(_cxx_root "${_cxx_bin_dir}/.." REALPATH)
+  set(_candidate_libcxx "${_cxx_root}/lib/c++/libc++.dylib")
+  if(EXISTS "${_candidate_libcxx}")
+    target_link_libraries(_core PRIVATE "${_candidate_libcxx}")
+  endif()
 endif()
 
 # MSVC: enable M_PI and other POSIX math constants (not defined by default)
