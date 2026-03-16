@@ -1,6 +1,6 @@
 # tests/conftest.py
 import pytest
-from pylitehtml import Renderer, OutputFormat
+from pylitehtml import Renderer
 
 SIMPLE_HTML = """<html><style>
   body { font-family: "Noto Sans", sans-serif; background: #fff; margin: 0; padding: 20px; }
@@ -18,7 +18,7 @@ FLEX_HTML = """<html><style>
 </div></body></html>"""
 
 @pytest.fixture(scope="session")
-def renderer():
+def renderer() -> Renderer:
     return Renderer(width=800)
 
 @pytest.fixture
