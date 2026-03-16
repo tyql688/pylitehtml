@@ -32,6 +32,27 @@ jobs:
           & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install --triplet x64-windows-static
         shell: pwsh
 
+      - name: Pre-cache virtualenv for cibuildwheel
+        run: |
+          VENV_VER="20.30.0"
+          URL="https://github.com/pypa/get-virtualenv/blob/${VENV_VER}/public/virtualenv.pyz?raw=true"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            CACHE_DIR="$HOME/Library/Caches/cibuildwheel"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            CACHE_DIR="$LOCALAPPDATA/cibuildwheel"
+          else
+            CACHE_DIR="$HOME/.cache/cibuildwheel"
+          fi
+          mkdir -p "$CACHE_DIR"
+          DEST="$CACHE_DIR/virtualenv-${VENV_VER}.pyz"
+          if [ -f "$DEST" ]; then
+            echo "Already cached: $DEST"
+          else
+            curl -fsSL --retry 5 --retry-delay 15 -o "$DEST" "$URL"
+            echo "Downloaded to $DEST"
+          fi
+        shell: bash
+
       - uses: pypa/cibuildwheel@v2.23
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
