@@ -37,8 +37,6 @@ jobs:
 
   test-windows:
     runs-on: windows-latest
-    env:
-      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
     strategy:
       matrix:
         python: ["3.10"]
@@ -49,22 +47,28 @@ jobs:
       - uses: actions/setup-python@v6
         with: { python-version: "${{ matrix.python }}" }
 
-      - name: Enable vcpkg binary cache (x-gha)
-        uses: actions/github-script@v8
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Bootstrap vcpkg
+      - name: Set vcpkg path
         run: |
           $vcpkg = Join-Path "${{ runner.workspace }}" "b\vcpkg"
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git $vcpkg
-          & (Join-Path $vcpkg "bootstrap-vcpkg.bat") -disableMetrics
           Add-Content $env:GITHUB_ENV "VCPKG_ROOT=$vcpkg"
         shell: pwsh
 
+      - name: Cache vcpkg
+        id: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.workspace }}/b/vcpkg
+          key: vcpkg-win-x64-${{ hashFiles('vcpkg.json') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          & (Join-Path "$env:VCPKG_ROOT" "bootstrap-vcpkg.bat") -disableMetrics
+        shell: pwsh
+
       - name: Install vcpkg dependencies
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
         run: |
           $exe  = Join-Path "$env:VCPKG_ROOT" "vcpkg.exe"
           $root = Join-Path "$env:VCPKG_ROOT" "installed"
