@@ -2,7 +2,7 @@
 import concurrent.futures
 import hashlib
 
-from pylitehtml import Renderer
+from pylitehtml import Renderer, RawResult
 
 HTMLS = [
     (
@@ -23,6 +23,8 @@ def test_concurrent_deterministic() -> None:
     r = Renderer(width=400)
     html = HTMLS[0]
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(lambda _: r.render(html), range(16)))
+        def render_one(_x: int) -> bytes | RawResult:
+            return r.render(html)
+        results = list(pool.map(render_one, range(16)))
     digests = {hashlib.md5(x).hexdigest() for x in results if isinstance(x, bytes)}
     assert len(digests) == 1, f"Non-deterministic: {len(digests)} unique outputs"
