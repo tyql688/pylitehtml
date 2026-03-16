@@ -46,7 +46,7 @@ jobs:
 
       - uses: pypa/cibuildwheel@v2.23
         env:
-          CIBW_BUILD: "cp312-abi3-*"   # one abi3 wheel per platform (covers Python 3.12+)
+          CIBW_BUILD: "cp312-*"   # build with Python 3.12; STABLE_ABI + wheel.py-api produce abi3 tag
           CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_WINDOWS: "AMD64"
