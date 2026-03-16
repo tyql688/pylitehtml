@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python: ["3.12"]
+        python: ["3.10"]
     steps:
       - uses: actions/checkout@v6
         with: { submodules: recursive }
@@ -30,7 +30,7 @@ jobs:
 
       - name: Build and test
         run: |
-          pip install scikit-build-core nanobind pytest pillow pytest-asyncio
+          pip install scikit-build-core pybind11 pytest pillow pytest-asyncio
           pip install -e . --no-build-isolation
           pytest tests/ -v
 
@@ -40,7 +40,7 @@ jobs:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
     strategy:
       matrix:
-        python: ["3.12"]
+        python: ["3.10"]
     steps:
       - uses: actions/checkout@v6
         with: { submodules: recursive }
@@ -88,7 +88,7 @@ jobs:
       - name: Build wheel and bundle DLLs with delvewheel
         run: |
           $env:PATH = "$env:VCPKG_BIN;$env:PATH"
-          pip install scikit-build-core nanobind delvewheel pytest pillow pytest-asyncio
+          pip install scikit-build-core pybind11 delvewheel pytest pillow pytest-asyncio
           pip wheel . --no-build-isolation -w dist\
           delvewheel repair (Get-ChildItem dist\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName) `
             -w dist-repaired\ --add-path "$env:VCPKG_BIN"

@@ -20,6 +20,8 @@ Quick start::
     # One-shot async (no renderer reuse)
     png = await pylitehtml.render_async("<h1>Hello</h1>", width=800)
 """
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
