@@ -28,8 +28,7 @@ jobs:
       - name: vcpkg deps (Windows)
         if: runner.os == 'Windows'
         run: |
-          & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install `
-            cairo pango fontconfig libwebp libjpeg-turbo --triplet x64-windows-static
+          & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install --triplet x64-windows-static
         shell: pwsh
 
       - name: Bootstrap vcpkg (macOS)
@@ -42,7 +41,7 @@ jobs:
       - name: vcpkg deps (macOS)
         if: runner.os == 'macOS'
         run: |
-          "$VCPKG_ROOT/vcpkg" install cairo pango fontconfig libwebp libjpeg-turbo --triplet arm64-osx
+          "$VCPKG_ROOT/vcpkg" install --triplet arm64-osx
 
       - uses: pypa/cibuildwheel@v2.23
         env:
