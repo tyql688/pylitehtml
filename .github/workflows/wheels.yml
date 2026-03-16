@@ -40,7 +40,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: "AMD64"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BEFORE_ALL_LINUX: |
-            dnf install -y cairo-devel pango-devel fontconfig-devel \
+            yum install -y cairo-devel pango-devel fontconfig-devel \
               libwebp-devel libjpeg-turbo-devel
           CIBW_BEFORE_ALL_MACOS: >
             brew install cairo pango fontconfig webp jpeg-turbo pkg-config 2>/dev/null || true
