@@ -29,7 +29,9 @@ jobs:
       - name: vcpkg deps (Windows)
         if: runner.os == 'Windows'
         run: |
-          & (Join-Path "$env:VCPKG_ROOT" "vcpkg.exe") install --triplet x64-windows
+          $exe  = Join-Path "$env:VCPKG_ROOT" "vcpkg.exe"
+          $root = Join-Path "$env:VCPKG_ROOT" "installed"
+          & $exe install --triplet x64-windows --x-install-root $root
         shell: pwsh
 
       - name: Configure Windows build environment
