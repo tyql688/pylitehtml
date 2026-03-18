@@ -39,6 +39,8 @@ jobs:
           $bin       = Join-Path $installed "bin"
           $pkgconf   = Join-Path $installed "tools\pkgconf"
           $toolchain = Join-Path "$env:VCPKG_ROOT" "scripts\buildsystems\vcpkg.cmake"
+          Write-Host "=== vcpkg bin contents ==="
+          Get-ChildItem $bin -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
           Add-Content $env:GITHUB_PATH $pkgconf
           Add-Content $env:GITHUB_PATH $bin
           Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
@@ -73,7 +75,7 @@ jobs:
 
       - uses: pypa/cibuildwheel@v2.23
         env:
-          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_BUILD: "cp310-*"  # DEBUG: single version to speed up iteration
           CIBW_SKIP: "*-musllinux_*"
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_MACOS: "arm64"
