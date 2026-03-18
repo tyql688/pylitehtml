@@ -88,7 +88,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_MACOS:   "delocate-wheel --require-target-macos-version 15.0 -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
             delvewheel repair -w {dest_dir} {wheel}
-            --add-path "%VCPKG_BIN%"
+            --add-path "${{ runner.workspace }}/b/vcpkg/installed/x64-windows/bin"
           CIBW_TEST_REQUIRES: "pytest pillow pytest-asyncio"
           CIBW_TEST_COMMAND: "pytest {project}/tests/test_basic.py {project}/tests/test_async.py -v"
 
