@@ -67,6 +67,10 @@ jobs:
           fi
         shell: bash
 
+      - name: Install delvewheel (Windows)
+        if: runner.os == 'Windows'
+        run: pip install delvewheel
+
       - uses: pypa/cibuildwheel@v2.23
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
@@ -83,8 +87,8 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX:   "auditwheel repair -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_MACOS:   "delocate-wheel --require-target-macos-version 15.0 -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
-            cmd /c "delvewheel repair -w {dest_dir} {wheel}
-            --add-path %VCPKG_BIN%"
+            delvewheel repair -w {dest_dir} {wheel}
+            --add-path "%VCPKG_BIN%"
           CIBW_TEST_REQUIRES: "pytest pillow pytest-asyncio"
           CIBW_TEST_COMMAND: "pytest {project}/tests/test_basic.py {project}/tests/test_async.py -v"
 
