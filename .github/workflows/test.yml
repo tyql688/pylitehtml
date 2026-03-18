@@ -81,8 +81,6 @@ jobs:
           $bin       = Join-Path $installed "bin"
           $pkgconf   = Join-Path $installed "tools\pkgconf"
           $toolchain = Join-Path "$env:VCPKG_ROOT" "scripts\buildsystems\vcpkg.cmake"
-          Write-Host "vcpkg bin exists: $(Test-Path $bin)"
-          Write-Host "DLL count: $((Get-ChildItem $bin -Filter '*.dll' -ErrorAction SilentlyContinue).Count)"
           Add-Content $env:GITHUB_PATH $pkgconf
           Add-Content $env:GITHUB_PATH $bin
           Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
