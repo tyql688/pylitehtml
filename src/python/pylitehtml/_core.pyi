@@ -99,7 +99,6 @@ class Renderer:
         self,
         html: str,
         *,
-        base_url: str = "",
         height: int = 0,
         fmt: OutputFormat = OutputFormat.PNG,
         quality: int = 85,
@@ -115,9 +114,6 @@ class Renderer:
         ----------
         html:
             HTML source string to render.
-        base_url:
-            Base URL for resolving relative resources (images, stylesheets).
-            Use ``"file:///path/to/"`` for local files or an ``http://`` URL.
         height:
             Fixed canvas height in pixels. ``0`` (default) = auto-size to content.
         fmt:
@@ -142,36 +138,19 @@ def render(
     html: str,
     width: int,
     *,
-    base_url: str = "",
+    default_font: str = "Noto Sans",
+    default_font_size: int = 16,
+    extra_fonts: list[str] = ...,
+    image_cache_max_bytes: int = 67_108_864,
+    image_timeout_ms: int = 5_000,
+    image_max_bytes: int = 10_485_760,
+    allow_http_images: bool = True,
+    dpi: float = 96.0,
+    device_height: int = 600,
+    lang: str = "en",
+    culture: str = "en-US",
     height: int = 0,
     fmt: OutputFormat = OutputFormat.PNG,
     quality: int = 85,
     shrink_to_fit: bool = True,
-) -> bytes | RawResult:
-    """
-    One-shot convenience function.
-
-    Creates a temporary :class:`Renderer`, renders once, and returns image data.
-    For repeated rendering, use :class:`Renderer` directly — it amortizes the
-    font-loading cost across calls.
-
-    Parameters
-    ----------
-    html:
-        HTML source string to render.
-    width:
-        Viewport width in pixels.
-    base_url:
-        Base URL for resolving relative resources.
-    height:
-        Fixed canvas height in pixels (0 = auto).
-    fmt:
-        Output format (:attr:`OutputFormat.PNG` by default).
-    quality:
-        JPEG quality 1–100 (ignored for PNG / RAW).
-
-    Returns
-    -------
-    bytes | RawResult
-        PNG / JPEG bytes, or :class:`RawResult` for RAW format.
-    """
+) -> bytes | RawResult: ...
