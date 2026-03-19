@@ -24,6 +24,8 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 # Windows: Python 3.8+ no longer searches PATH for DLLs when loading extension
 # modules. Add vcpkg/system DLL directories before importing _core.
@@ -41,6 +43,8 @@ if sys.platform == "win32":
             except OSError:
                 pass
 
+import jinja2  # noqa: E402
+
 from ._core import ImageFetchError, OutputFormat, RawResult  # noqa: E402
 from ._core import Renderer as _CoreRenderer
 from ._core import RenderError  # noqa: E402
@@ -55,6 +59,7 @@ __all__ = [
     "ImageFetchError",
     "Renderer",
     "render",
+    "render_file",
 ]
 
 
@@ -177,6 +182,54 @@ class Renderer:
             shrink_to_fit=shrink_to_fit,
         )
 
+    def render_file(
+        self,
+        path: str | Path,
+        *,
+        fmt: str | OutputFormat = OutputFormat.PNG,
+        quality: int = 85,
+        height: int = 0,
+        shrink_to_fit: bool = True,
+        **template_data: Any,
+    ) -> bytes | RawResult:
+        """
+        Render a local HTML file to image data.
+
+        Relative resources (CSS via ``<link>``, images via ``<img>``) are
+        resolved from the file's directory automatically.
+
+        If *template_data* is provided, the file is treated as a
+        `Jinja2 <https://jinja.palletsprojects.com/>`_ template and rendered
+        with the given keyword arguments before the HTML-to-image pass.
+        Requires ``jinja2`` (install with ``pip install pylitehtml[templates]``).
+
+        Example::
+
+            r = Renderer(width=800)
+
+            # Plain HTML file with external CSS
+            png = r.render_file("project/index.html")
+
+            # Jinja2 template
+            png = r.render_file("project/order.html", title="订单", items=[...])
+        """
+        resolved = Path(path).resolve()
+        html = resolved.read_text(encoding="utf-8")
+
+        if template_data:
+            env = jinja2.Environment(
+                loader=jinja2.FileSystemLoader(resolved.parent),
+            )
+            html = env.get_template(resolved.name).render(**template_data)
+
+        # Inject <base> so litehtml resolves relative CSS/image paths.
+        html = f'<base href="file://{resolved.as_posix()}">\n{html}'
+
+        return self.render(
+            html, fmt=fmt, quality=quality,
+            height=height, shrink_to_fit=shrink_to_fit,
+        )
+
 
 def render(
     html: str,
@@ -219,4 +272,35 @@ def render(
         fmt=_resolve_fmt(fmt),
         quality=quality,
         shrink_to_fit=shrink_to_fit,
+    )
+
+
+def render_file(
+    path: str | Path,
+    width: int,
+    *,
+    locale: str = "en-US",
+    dpi: float = 96.0,
+    device_height: int = 600,
+    fonts: FontConfig | None = None,
+    images: ImageConfig | None = None,
+    fmt: str | OutputFormat = OutputFormat.PNG,
+    quality: int = 85,
+    height: int = 0,
+    shrink_to_fit: bool = True,
+    **template_data: Any,
+) -> bytes | RawResult:
+    """
+    One-shot file rendering — creates a temporary :class:`Renderer`.
+
+    Equivalent to ``Renderer(width, ...).render_file(path, ...)``.
+    """
+    r = Renderer(
+        width, locale=locale, dpi=dpi,
+        device_height=device_height, fonts=fonts, images=images,
+    )
+    return r.render_file(
+        path, fmt=fmt, quality=quality,
+        height=height, shrink_to_fit=shrink_to_fit,
+        **template_data,
     )
