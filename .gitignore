@@ -1,0 +1,16 @@
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.so
+*.pyd
+*.dylib
+_skbuild/
+.cmake/
+tests/assets/*
+!tests/assets/templates/
+.venv/
+.claude/
+.reference/
+uv.lock
+docs/superpowers/

@@ -1,0 +1,100 @@
+name: Test
+on:
+  push:
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10"]
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }
+      - uses: actions/setup-python@v6
+        with: { python-version: "${{ matrix.python }}" }
+
+      - name: System deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev \
+            libwebp-dev libjpeg-turbo8-dev cmake ninja-build
+
+      - name: System deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --quiet cairo pango fontconfig webp jpeg-turbo cmake ninja 2>/dev/null || true
+
+      - name: Build and test
+        run: |
+          pip install scikit-build-core pybind11 pytest pillow pytest-asyncio
+          pip install -e . --no-build-isolation
+          pytest tests/ -v
+
+  test-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python: ["3.10"]
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }
+
+      - uses: actions/setup-python@v6
+        with: { python-version: "${{ matrix.python }}" }
+
+      - name: Set vcpkg path
+        run: |
+          $vcpkg = Join-Path "${{ runner.workspace }}" "b\vcpkg"
+          Add-Content $env:GITHUB_ENV "VCPKG_ROOT=$vcpkg"
+        shell: pwsh
+
+      - name: Cache vcpkg
+        id: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.workspace }}/b/vcpkg
+          key: vcpkg-win-x64-${{ hashFiles('vcpkg.json') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          & (Join-Path "$env:VCPKG_ROOT" "bootstrap-vcpkg.bat") -disableMetrics
+        shell: pwsh
+
+      - name: Install vcpkg dependencies
+        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+        run: |
+          $exe  = Join-Path "$env:VCPKG_ROOT" "vcpkg.exe"
+          $root = Join-Path "$env:VCPKG_ROOT" "installed"
+          & $exe install --triplet x64-windows --x-install-root $root
+        shell: pwsh
+
+      - name: Configure build environment
+        run: |
+          $installed = Join-Path "$env:VCPKG_ROOT" "installed\x64-windows"
+          $bin       = Join-Path $installed "bin"
+          $pkgconf   = Join-Path $installed "tools\pkgconf"
+          $toolchain = Join-Path "$env:VCPKG_ROOT" "scripts\buildsystems\vcpkg.cmake"
+          Add-Content $env:GITHUB_PATH $pkgconf
+          Add-Content $env:GITHUB_PATH $bin
+          Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
+          Add-Content $env:GITHUB_ENV "VCPKG_BIN=$bin"
+          Add-Content $env:GITHUB_ENV "SKBUILD_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+        shell: pwsh
+
+      - name: Build wheel and bundle DLLs with delvewheel
+        run: |
+          $env:PATH = "$env:VCPKG_BIN;$env:PATH"
+          pip install scikit-build-core pybind11 delvewheel pytest pillow pytest-asyncio
+          pip wheel . --no-build-isolation -w dist\
+          delvewheel repair (Get-ChildItem dist\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName) `
+            -w dist-repaired\ --add-path "$env:VCPKG_BIN"
+          pip install (Get-ChildItem dist-repaired\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName)
+          pytest tests\ -v
+        shell: pwsh

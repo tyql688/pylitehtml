@@ -1,0 +1,12 @@
+{
+  "name": "pylitehtml",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "cairo",
+    "pango",
+    "fontconfig",
+    "libwebp",
+    "libjpeg-turbo",
+    "pkgconf"
+  ]
+}
