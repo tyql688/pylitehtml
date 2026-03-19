@@ -17,8 +17,7 @@
 #include <librsvg/rsvg.h>
 #endif
 
-#undef CPPHTTPLIB_OPENSSL_SUPPORT
-#include "vendor/httplib.h"
+#include "http_util.h"
 
 namespace fs = std::filesystem;
 
@@ -292,22 +291,9 @@ cairo_surface_t* ImageCache::load_svg_mem(const uint8_t* data, size_t size) {
 }
 
 cairo_surface_t* ImageCache::load_http(const std::string& url) {
-    bool https = url.rfind("https://", 0) == 0;
-    std::string rest = url.substr(https ? 8 : 7);
-    auto slash = rest.find('/');
-    std::string host = rest.substr(0, slash);
-    std::string path = slash != std::string::npos ? rest.substr(slash) : "/";
-
-    httplib::Client cli((https ? "https://" : "http://") + host);
-    int sec = cfg_.timeout_ms / 1000;
-    int us  = (cfg_.timeout_ms % 1000) * 1000;
-    cli.set_connection_timeout(sec, us);
-    cli.set_read_timeout(sec, us);
-
-    auto res = cli.Get(path);
-    if (!res || res->status != 200) return nullptr;
-    if (res->body.size() > cfg_.max_image_bytes) return nullptr;
-
+    std::string body = http_util::fetch(url, cfg_.timeout_ms);
+    if (body.empty()) return nullptr;
+    if (body.size() > cfg_.max_image_bytes) return nullptr;
     return load_from_memory(
-        reinterpret_cast<const uint8_t*>(res->body.data()), res->body.size());
+        reinterpret_cast<const uint8_t*>(body.data()), body.size());
 }

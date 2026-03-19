@@ -11,8 +11,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#undef CPPHTTPLIB_OPENSSL_SUPPORT
-#include "vendor/httplib.h"
+#include "http_util.h"
 
 namespace fs = std::filesystem;
 
@@ -236,7 +235,7 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
         return;
     }
 
-    const std::string& effective_base = baseurl.empty() ? base_url_ : std::string(baseurl);
+    std::string effective_base = baseurl.empty() ? base_url_ : std::string(baseurl);
     if (effective_base.empty()) return;
 
     if (effective_base.rfind("file://", 0) == 0) {
@@ -249,7 +248,6 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
 
     // HTTP CSS: resolve URL and fetch
     if (effective_base.rfind("http://", 0) == 0 || effective_base.rfind("https://", 0) == 0) {
-        // Build absolute URL: if url is already absolute, use it; otherwise join with base dir
         std::string abs_url;
         if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
             abs_url = url;
@@ -257,18 +255,7 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
             auto slash = effective_base.rfind('/');
             abs_url = effective_base.substr(0, slash + 1) + url;
         }
-
-        bool https = abs_url.rfind("https://", 0) == 0;
-        std::string rest = abs_url.substr(https ? 8 : 7);
-        auto slash = rest.find('/');
-        std::string host = rest.substr(0, slash);
-        std::string path = (slash != std::string::npos) ? rest.substr(slash) : "/";
-
-        httplib::Client cli((https ? "https://" : "http://") + host);
-        cli.set_connection_timeout(5, 0);
-        cli.set_read_timeout(5, 0);
-        auto res = cli.Get(path);
-        if (res && res->status == 200) text = res->body;
+        text = http_util::fetch(abs_url, 5000);
         return;
     }
 }
