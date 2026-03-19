@@ -40,6 +40,7 @@ find_package(pybind11 CONFIG REQUIRED)
 # ── Extension module ─────────────────────────────────────────────────────────
 pybind11_add_module(_core MODULE
   src/cpp/binding.cpp
+  src/cpp/http_util.cpp
   src/cpp/image_cache.cpp
   src/cpp/font_manager.cpp
   src/cpp/py_container.cpp
