@@ -61,7 +61,8 @@ public:
         int surf_w = 0, surf_h = 0;
         {
             py::gil_scoped_release release;
-            PyContainer container(fm_, ic_, width_, dpi_, device_height_, lang_, culture_);
+            PyContainer container(fm_, ic_, width_, dpi_, device_height_, lang_, culture_,
+                                  ic_.allow_http());
             try {
                 container.render(html, base_url, height, shrink_to_fit);
             } catch (const std::exception& e) {

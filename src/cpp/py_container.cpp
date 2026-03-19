@@ -17,12 +17,14 @@ namespace fs = std::filesystem;
 
 PyContainer::PyContainer(FontManager& fm, ImageCache& ic, int width,
                          float dpi, int device_height,
-                         std::string lang, std::string culture)
+                         std::string lang, std::string culture,
+                         bool allow_http)
     : fm_(fm), ic_(ic), width_(width)
     , dpi_(dpi > 0 ? dpi : 96.0f)
     , device_height_(device_height > 0 ? device_height : 600)
     , lang_(std::move(lang))
-    , culture_(std::move(culture)) {}
+    , culture_(std::move(culture))
+    , allow_http_(allow_http) {}
 
 PyContainer::~PyContainer() {
     fonts_.clear();
@@ -247,6 +249,7 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
     }
 
     // HTTP CSS: resolve URL and fetch
+    if (!allow_http_) return;
     if (effective_base.rfind("http://", 0) == 0 || effective_base.rfind("https://", 0) == 0) {
         std::string abs_url;
         if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
@@ -278,12 +281,15 @@ void PyContainer::get_language(litehtml::string& lang, litehtml::string& culture
 
 // ── Text transform ────────────────────────────────────────────────────────────
 void PyContainer::transform_text(litehtml::string& text, litehtml::text_transform tt) {
-    if (tt == litehtml::text_transform_uppercase)
-        std::transform(text.begin(), text.end(), text.begin(),
-            [](unsigned char c) { return static_cast<char>(::toupper(c)); });
-    else if (tt == litehtml::text_transform_lowercase)
-        std::transform(text.begin(), text.end(), text.begin(),
-            [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+    if (tt == litehtml::text_transform_uppercase) {
+        char* upper = g_utf8_strup(text.c_str(), -1);
+        text = upper;
+        g_free(upper);
+    } else if (tt == litehtml::text_transform_lowercase) {
+        char* lower = g_utf8_strdown(text.c_str(), -1);
+        text = lower;
+        g_free(lower);
+    }
 }
 
 litehtml::element::ptr PyContainer::create_element(const char*, const litehtml::string_map&,

@@ -24,6 +24,8 @@ public:
     // Returns non-owning pointer valid for lifetime of this cache, or nullptr.
     cairo_surface_t* get(const std::string& url, const std::string& base_url);
 
+    bool allow_http() const { return cfg_.allow_http; }
+
 private:
     struct Entry {
         cairo_surface_t* surface;

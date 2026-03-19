@@ -31,7 +31,8 @@ public:
                 float dpi = 96.0f,
                 int device_height = 600,
                 std::string lang = "en",
-                std::string culture = "en-US");
+                std::string culture = "en-US",
+                bool allow_http = true);
     ~PyContainer();
 
     // Render html into an internal cairo_surface_t; returns actual height.
@@ -90,6 +91,7 @@ private:
     int          device_height_;
     std::string  lang_;
     std::string  culture_;
+    bool         allow_http_;
     int          rendered_height_ = 0;
     std::string  base_url_;
 
