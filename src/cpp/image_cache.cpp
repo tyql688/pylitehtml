@@ -8,6 +8,7 @@
 #include <csetjmp>
 #include <cstring>
 #include <cmath>
+#include <mutex>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
