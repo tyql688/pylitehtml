@@ -2,6 +2,7 @@
 #pragma once
 #include <fontconfig/fontconfig.h>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,8 +28,10 @@ public:
 
 private:
     Config cfg_;
-    FcConfig* fc_config_ = nullptr;
 
-    // fontconfig global init is done once per process via call_once.
-    static std::once_flag fc_init_flag_;
+    // Process-wide shared state
+    static std::once_flag   fc_init_flag_;
+    static std::mutex       fc_mutex_;
+    static FcConfig*        fc_config_;
+    static std::set<std::string> registered_fonts_;
 };
