@@ -4,7 +4,7 @@ import time
 
 import pytest
 from PIL import Image
-from pylitehtml import Renderer
+from pylitehtml import Renderer, ImageConfig
 
 ASSETS = pathlib.Path(__file__).parent / "assets"
 
@@ -33,7 +33,7 @@ def test_local_jpeg() -> None:
 
 
 def test_allow_http_false_skips_image() -> None:
-    r = Renderer(width=200, allow_http_images=False)
+    r = Renderer(width=200, images=ImageConfig(allow_http=False))
     html = '<img src="http://example.com/x.png" width="10" height="10">'
     result = r.render(html)
     assert isinstance(result, bytes)
@@ -41,7 +41,7 @@ def test_allow_http_false_skips_image() -> None:
 
 
 def test_http_timeout_respected() -> None:
-    r = Renderer(width=200, image_timeout_ms=200)
+    r = Renderer(width=200, images=ImageConfig(timeout_ms=200))
     html = '<img src="http://10.255.255.1/x.png" width="10" height="10">'
     start = time.monotonic()
     _ = r.render(html)

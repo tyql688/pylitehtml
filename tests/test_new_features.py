@@ -5,7 +5,7 @@ import io
 import pathlib
 
 from PIL import Image
-from pylitehtml import Renderer, OutputFormat, RawResult
+from pylitehtml import Renderer, ImageConfig, OutputFormat, RawResult
 
 ASSETS = pathlib.Path(__file__).parent / "assets"
 
@@ -198,7 +198,7 @@ def test_locale_plain_tag() -> None:
 
 def test_image_cache_mb_parameter() -> None:
     """image_cache_mb parameter should be accepted and produce a valid image."""
-    r = Renderer(width=400, image_cache_mb=8, image_max_mb=2)
+    r = Renderer(width=400, images=ImageConfig(cache_mb=8, max_mb=2))
     png = r.render("<p>test</p>")
     assert isinstance(png, bytes)
     assert len(png) > 0
