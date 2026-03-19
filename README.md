@@ -25,7 +25,8 @@ png = r.render("<h1>Hello</h1>")
 jpg = r.render("<h1>Hello</h1>", fmt="jpeg", quality=90)
 
 # 异步渲染（不阻塞事件循环）
-png = await r.render_async("<h1>Hello</h1>")
+import asyncio
+png = await asyncio.to_thread(r.render, "<h1>Hello</h1>")
 ```
 
 ---
@@ -36,16 +37,26 @@ png = await r.render_async("<h1>Hello</h1>")
 Renderer(
     width,                    # 必填：画布宽度（像素）
     *,
-    default_font = "Noto Sans",  # 默认字体（系统需已安装）
-    default_font_size = 16,      # 默认字号（像素）
-    extra_fonts = None,          # 额外字体文件路径列表，如 ["/path/to/font.ttf"]
-    image_cache_mb = 64.0,       # 图片缓存上限（MB）
-    image_timeout_ms = 5000,     # HTTP 图片请求超时（毫秒）
-    image_max_mb = 10.0,         # 单张图片最大体积（MB），超出则跳过
-    allow_http_images = True,    # 是否允许通过 HTTP/HTTPS 加载图片
+    locale = "en-US",            # 语言区域，影响 CSS :lang() 选择器，如 "zh-CN"
     dpi = 96.0,                  # DPI，影响 pt 单位换算；HiDPI 用 144 或 192
     device_height = 600,         # 媒体查询用的逻辑屏幕高度（不影响实际输出高度）
-    locale = "en-US",            # 语言区域，影响 CSS :lang() 选择器，如 "zh-CN"
+    fonts = FontConfig(),        # 字体配置（见下方）
+    images = ImageConfig(),      # 图片配置（见下方）
+)
+```
+
+```python
+FontConfig(
+    default = "Noto Sans",       # 默认字体（系统需已安装）
+    size = 16,                   # 默认字号（像素）
+    extra = [],                  # 额外字体文件路径列表，如 ["/path/to/font.ttf"]
+)
+
+ImageConfig(
+    cache_mb = 64.0,             # 图片缓存上限（MB）
+    timeout_ms = 5000,           # HTTP 图片请求超时（毫秒）
+    max_mb = 10.0,               # 单张图片最大体积（MB），超出则跳过
+    allow_http = True,           # 是否允许通过 HTTP/HTTPS 加载图片和 CSS
 )
 ```
 
@@ -55,9 +66,9 @@ Renderer(
 |------|-----------|
 | 渲染中文 / 多语言内容 | `locale="zh-CN"` |
 | 输出 HiDPI / Retina 图 | `dpi=192.0` |
-| 加载本地字体文件 | `extra_fonts=["/path/to/font.ttf"]` |
-| 禁用网络图片 | `allow_http_images=False` |
-| 渲染很多大图 | 调大 `image_cache_mb` |
+| 加载本地字体文件 | `fonts=FontConfig(extra=["/path/to/font.ttf"])` |
+| 禁用网络图片和 CSS | `images=ImageConfig(allow_http=False)` |
+| 渲染很多大图 | `images=ImageConfig(cache_mb=128)` |
 
 ---
 
@@ -67,10 +78,9 @@ Renderer(
 r.render(
     html,                        # 必填：HTML 字符串
     *,
-    base_url = "",               # 资源基础路径，如 "file:///path/to/" 或 "https://..."
-    height = 0,                  # 固定输出高度（像素）；0 = 自动按内容高度
     fmt = "png",                 # 输出格式："png" / "jpeg" / "raw"
     quality = 85,                # JPEG 质量 1–100（png/raw 忽略此参数）
+    height = 0,                  # 固定输出高度（像素）；0 = 自动按内容高度
     shrink_to_fit = True,        # True = 内容比 width 窄时，自动收窄画布宽度；False = 固定 width 宽度
 )
 ```
@@ -78,8 +88,6 @@ r.render(
 返回值：
 - `fmt="png"` / `fmt="jpeg"` → `bytes`
 - `fmt="raw"` → `RawResult`（含 `.data` `.width` `.height`，像素格式为 BGRA）
-
-`render_async()` 参数完全相同，加 `await` 调用即可。
 
 ---
 
@@ -92,7 +100,7 @@ r.render(
 | `data:` URI 内嵌图片（PNG/JPEG/WebP/SVG） | ✅ |
 | CSS `@import`（本地文件 / HTTP） | ✅ |
 | 多线程并发渲染 | ✅ |
-| 异步渲染（asyncio） | ✅ |
+| 异步渲染（asyncio.to_thread） | ✅ |
 | JavaScript | ❌ 静态渲染，不执行 JS |
 | CSS `@font-face`（HTTP 字体） | ❌ 不支持，字体须预先安装 |
 | CSS Grid | ❌ litehtml 暂不支持 |
@@ -112,13 +120,10 @@ png = r.render("<p>你好，世界</p>")
 ### 异步（FastAPI / asyncio）
 
 ```python
+import asyncio
+
 r = pylitehtml.Renderer(width=800)
-
-# 推荐：实例方法
-png = await r.render_async("<h1>Hello</h1>")
-
-# 一次性
-png = await pylitehtml.render_async("<h1>Hello</h1>", width=800)
+png = await asyncio.to_thread(r.render, "<h1>Hello</h1>")
 ```
 
 ### HiDPI 输出
@@ -146,8 +151,10 @@ png = pylitehtml.Renderer(width=400).render(
 ```python
 r = pylitehtml.Renderer(
     width=800,
-    default_font="My Font",
-    extra_fonts=["/path/to/myfont.ttf"],
+    fonts=pylitehtml.FontConfig(
+        default="My Font",
+        extra=["/path/to/myfont.ttf"],
+    ),
 )
 ```
 
