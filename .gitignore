@@ -9,3 +9,4 @@ _skbuild/
 .cmake/
 tests/assets/
 .venv/
+.claude/

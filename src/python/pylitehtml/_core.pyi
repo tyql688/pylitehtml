@@ -103,7 +103,7 @@ class Renderer:
         height: int = 0,
         fmt: OutputFormat = OutputFormat.PNG,
         quality: int = 85,
-        shrink_to_fit: bool = False,
+        shrink_to_fit: bool = True,
     ) -> bytes | RawResult:
         """
         Render HTML and return image data.
@@ -146,7 +146,7 @@ def render(
     height: int = 0,
     fmt: OutputFormat = OutputFormat.PNG,
     quality: int = 85,
-    shrink_to_fit: bool = False,
+    shrink_to_fit: bool = True,
 ) -> bytes | RawResult:
     """
     One-shot convenience function.

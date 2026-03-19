@@ -51,7 +51,7 @@ jobs:
         if: runner.os == 'Windows'
         run: pip install delvewheel
 
-      - uses: pypa/cibuildwheel@v2.23
+      - uses: pypa/cibuildwheel@v2.25
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "*-musllinux_*"

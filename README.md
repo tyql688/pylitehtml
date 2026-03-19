@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/tyql688/pylitehtml/actions/workflows/test.yml/badge.svg)
 
-HTML+CSS → PNG/JPEG 图像渲染器。轻量级，无需无头浏览器，线程安全。需要 Python ≥ 3.10。
+HTML+CSS → PNG/JPEG 图像渲染器。轻量级，无需无头浏览器，线程安全。需要 Python ≥ 3.10，已测试支持 3.14。
 
 
 ## 安装
@@ -71,7 +71,7 @@ r.render(
     height = 0,                  # 固定输出高度（像素）；0 = 自动按内容高度
     fmt = "png",                 # 输出格式："png" / "jpeg" / "raw"
     quality = 85,                # JPEG 质量 1–100（png/raw 忽略此参数）
-    shrink_to_fit = False,       # True = 内容比 width 窄时，自动收窄画布宽度
+    shrink_to_fit = True,        # True = 内容比 width 窄时，自动收窄画布宽度；False = 固定 width 宽度
 )
 ```
 

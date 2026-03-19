@@ -20,11 +20,13 @@ Quick start::
     # One-shot async (no renderer reuse)
     png = await pylitehtml.render_async("<h1>Hello</h1>", width=800)
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
 import sys
+from typing import Literal, overload
 
 # Windows: Python 3.8+ no longer searches PATH for DLLs when loading extension
 # modules. Add vcpkg/system DLL directories before importing _core.
@@ -42,14 +44,10 @@ if sys.platform == "win32":
             except OSError:
                 pass
 
-from ._core import (  # noqa: E402
-    ImageFetchError,
-    OutputFormat,
-    RawResult,
-    RenderError,
-    Renderer as _CoreRenderer,
-    render as _render_core,
-)
+from ._core import ImageFetchError, OutputFormat, RawResult  # noqa: E402
+from ._core import Renderer as _CoreRenderer
+from ._core import RenderError  # noqa: E402
+from ._core import render as _render_core
 
 __all__ = [
     "OutputFormat",
@@ -69,7 +67,9 @@ def _resolve_fmt(fmt: str | OutputFormat) -> OutputFormat:
     try:
         return _map[fmt.lower()]
     except KeyError:
-        raise ValueError(f"Unknown fmt {fmt!r}. Use 'png', 'jpeg', 'raw', or OutputFormat.")
+        raise ValueError(
+            f"Unknown fmt {fmt!r}. Use 'png', 'jpeg', 'raw', or OutputFormat."
+        )
 
 
 def _split_locale(locale: str) -> tuple[str, str]:
@@ -160,6 +160,32 @@ class Renderer:
             culture=culture,
         )
 
+    # overloads for precise return type inference based on fmt string
+    @overload
+    def render(
+        self,
+        html: str,
+        *,
+        base_url: str = "",
+        height: int = 0,
+        fmt: Literal["raw"],
+        quality: int = 85,
+        shrink_to_fit: bool = True,
+    ) -> RawResult: ...
+
+    @overload
+    def render(
+        self,
+        html: str,
+        *,
+        base_url: str = "",
+        height: int = 0,
+        fmt: Literal["png"] | Literal["jpeg"],
+        quality: int = 85,
+        shrink_to_fit: bool = True,
+    ) -> bytes: ...
+
+    @overload
     def render(
         self,
         html: str,
@@ -168,7 +194,18 @@ class Renderer:
         height: int = 0,
         fmt: str | OutputFormat = OutputFormat.PNG,
         quality: int = 85,
-        shrink_to_fit: bool = False,
+        shrink_to_fit: bool = True,
+    ) -> bytes | RawResult: ...
+
+    def render(
+        self,
+        html: str,
+        *,
+        base_url: str = "",
+        height: int = 0,
+        fmt: str | OutputFormat = OutputFormat.PNG,
+        quality: int = 85,
+        shrink_to_fit: bool = True,
     ) -> bytes | RawResult:
         """
         Render HTML and return image data.
@@ -188,7 +225,7 @@ class Renderer:
             Output format. Accepts :class:`OutputFormat` or string
             ``'png'``, ``'jpeg'``, ``'raw'``. Default ``'png'``.
         quality:
-            JPEG compression quality, 1–100. Ignored for PNG and RAW.
+            JPEG compression quality, 1-100. Ignored for PNG and RAW.
         shrink_to_fit:
             If ``True`` and the rendered content bounding box is narrower than
             *width*, re-render at the content width so the output image is not
@@ -210,6 +247,32 @@ class Renderer:
             shrink_to_fit=shrink_to_fit,
         )
 
+    # overloads for precise return type inference based on fmt string
+    @overload
+    async def render_async(
+        self,
+        html: str,
+        *,
+        base_url: str = "",
+        height: int = 0,
+        fmt: Literal["raw"],
+        quality: int = 85,
+        shrink_to_fit: bool = True,
+    ) -> RawResult: ...
+
+    @overload
+    async def render_async(
+        self,
+        html: str,
+        *,
+        base_url: str = "",
+        height: int = 0,
+        fmt: Literal["png"] | Literal["jpeg"],
+        quality: int = 85,
+        shrink_to_fit: bool = True,
+    ) -> bytes: ...
+
+    @overload
     async def render_async(
         self,
         html: str,
@@ -218,7 +281,18 @@ class Renderer:
         height: int = 0,
         fmt: str | OutputFormat = OutputFormat.PNG,
         quality: int = 85,
-        shrink_to_fit: bool = False,
+        shrink_to_fit: bool = True,
+    ) -> bytes | RawResult: ...
+
+    async def render_async(
+        self,
+        html: str,
+        *,
+        base_url: str = "",
+        height: int = 0,
+        fmt: str | OutputFormat = OutputFormat.PNG,
+        quality: int = 85,
+        shrink_to_fit: bool = True,
     ) -> bytes | RawResult:
         """
         Async render — runs in the default thread-pool via ``asyncio.to_thread``.
@@ -238,7 +312,7 @@ class Renderer:
             Output format. Accepts :class:`OutputFormat` or string
             ``'png'``, ``'jpeg'``, ``'raw'``. Default ``'png'``.
         quality:
-            JPEG quality 1–100. Ignored for PNG and RAW.
+            JPEG quality 1-100. Ignored for PNG and RAW.
         shrink_to_fit:
             Re-render at content width if content is narrower than viewport.
 
@@ -259,6 +333,34 @@ class Renderer:
         )
 
 
+# overloads for precise return type inference based on fmt string
+@overload
+def render(
+    html: str,
+    width: int,
+    *,
+    base_url: str = "",
+    height: int = 0,
+    fmt: Literal["raw"],
+    quality: int = 85,
+    shrink_to_fit: bool = True,
+) -> RawResult: ...
+
+
+@overload
+def render(
+    html: str,
+    width: int,
+    *,
+    base_url: str = "",
+    height: int = 0,
+    fmt: Literal["png"] | Literal["jpeg"],
+    quality: int = 85,
+    shrink_to_fit: bool = True,
+) -> bytes: ...
+
+
+@overload
 def render(
     html: str,
     width: int,
@@ -267,7 +369,19 @@ def render(
     height: int = 0,
     fmt: str | OutputFormat = OutputFormat.PNG,
     quality: int = 85,
-    shrink_to_fit: bool = False,
+    shrink_to_fit: bool = True,
+) -> bytes | RawResult: ...
+
+
+def render(
+    html: str,
+    width: int,
+    *,
+    base_url: str = "",
+    height: int = 0,
+    fmt: str | OutputFormat = OutputFormat.PNG,
+    quality: int = 85,
+    shrink_to_fit: bool = True,
 ) -> bytes | RawResult:
     """
     One-shot convenience function — creates a temporary :class:`Renderer`.
@@ -289,7 +403,7 @@ def render(
         Output format. Accepts :class:`OutputFormat` or string
         ``'png'``, ``'jpeg'``, ``'raw'``. Default ``'png'``.
     quality:
-        JPEG quality 1–100. Ignored for PNG and RAW.
+        JPEG quality 1-100. Ignored for PNG and RAW.
     shrink_to_fit:
         Re-render at content width if content is narrower than viewport.
 
@@ -301,13 +415,54 @@ def render(
         When *fmt* is ``'raw'`` or :attr:`OutputFormat.RAW`.
     """
     return _render_core(
-        html, width,
+        html,
+        width,
         base_url=base_url,
         height=height,
         fmt=_resolve_fmt(fmt),
         quality=quality,
         shrink_to_fit=shrink_to_fit,
     )
+
+
+# overloads for precise return type inference based on fmt string
+@overload
+async def render_async(
+    html: str,
+    width: int,
+    *,
+    base_url: str = "",
+    height: int = 0,
+    fmt: Literal["raw"],
+    quality: int = 85,
+    shrink_to_fit: bool = True,
+) -> RawResult: ...
+
+
+@overload
+async def render_async(
+    html: str,
+    width: int,
+    *,
+    base_url: str = "",
+    height: int = 0,
+    fmt: Literal["png"] | Literal["jpeg"],
+    quality: int = 85,
+    shrink_to_fit: bool = True,
+) -> bytes: ...
+
+
+@overload
+async def render_async(
+    html: str,
+    width: int,
+    *,
+    base_url: str = "",
+    height: int = 0,
+    fmt: str | OutputFormat = OutputFormat.PNG,
+    quality: int = 85,
+    shrink_to_fit: bool = True,
+) -> bytes | RawResult: ...
 
 
 async def render_async(
@@ -318,7 +473,7 @@ async def render_async(
     height: int = 0,
     fmt: str | OutputFormat = OutputFormat.PNG,
     quality: int = 85,
-    shrink_to_fit: bool = False,
+    shrink_to_fit: bool = True,
 ) -> bytes | RawResult:
     """
     Async one-shot convenience function.
@@ -342,7 +497,7 @@ async def render_async(
         Output format. Accepts :class:`OutputFormat` or string
         ``'png'``, ``'jpeg'``, ``'raw'``. Default ``'png'``.
     quality:
-        JPEG quality 1–100. Ignored for PNG and RAW.
+        JPEG quality 1-100. Ignored for PNG and RAW.
     shrink_to_fit:
         Re-render at content width if content is narrower than viewport.
 
@@ -354,7 +509,8 @@ async def render_async(
     resolved_fmt = _resolve_fmt(fmt)
     return await asyncio.to_thread(
         _render_core,
-        html, width,
+        html,
+        width,
         base_url=base_url,
         height=height,
         fmt=resolved_fmt,

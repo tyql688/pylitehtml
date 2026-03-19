@@ -136,7 +136,7 @@ PYBIND11_MODULE(_core, m) {
              py::arg("height")        = 0,
              py::arg("fmt")           = OutputFormat::PNG,
              py::arg("quality")       = 85,
-             py::arg("shrink_to_fit") = false);
+             py::arg("shrink_to_fit") = true);
 
     // Note: this convenience function constructs a full Renderer (including
     // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
@@ -153,5 +153,5 @@ PYBIND11_MODULE(_core, m) {
         py::arg("height")        = 0,
         py::arg("fmt")           = OutputFormat::PNG,
         py::arg("quality")       = 85,
-        py::arg("shrink_to_fit") = false);
+        py::arg("shrink_to_fit") = true);
 }
