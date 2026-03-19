@@ -37,8 +37,7 @@ public:
 
     // Render html into an internal cairo_surface_t; returns actual height.
     // shrink_to_fit: re-render at content_width if content is narrower than width.
-    int render(const std::string& html, const std::string& base_url,
-               int fixed_height, bool shrink_to_fit = false);
+    int render(const std::string& html, int fixed_height, bool shrink_to_fit = false);
 
     cairo_surface_t* surface() const { return surface_; }
 

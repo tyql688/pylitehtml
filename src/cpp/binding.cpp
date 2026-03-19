@@ -53,7 +53,7 @@ public:
               allow_http_images})
     {}
 
-    py::object render(const std::string& html, const std::string& base_url,
+    py::object render(const std::string& html,
                       int height, OutputFormat fmt, int quality, bool shrink_to_fit) {
         // Release the GIL only for the CPU-heavy rendering work.
         // py::bytes / py::cast must be constructed while holding the GIL.
@@ -64,7 +64,7 @@ public:
             PyContainer container(fm_, ic_, width_, dpi_, device_height_, lang_, culture_,
                                   ic_.allow_http());
             try {
-                container.render(html, base_url, height, shrink_to_fit);
+                container.render(html, height, shrink_to_fit);
             } catch (const std::exception& e) {
                 throw RenderError(e.what());
             }
@@ -133,7 +133,6 @@ PYBIND11_MODULE(_core, m) {
              py::arg("culture")               = "en-US")
         .def("render", &Renderer::render,
              py::arg("html"),
-             py::arg("base_url")      = "",
              py::arg("height")        = 0,
              py::arg("fmt")           = OutputFormat::PNG,
              py::arg("quality")       = 85,
@@ -143,16 +142,33 @@ PYBIND11_MODULE(_core, m) {
     // FontManager + FcConfigSetCurrent) on every call. For repeated rendering,
     // use the Renderer class directly.
     m.def("render",
-        [](const std::string& html, int width, const std::string& base_url,
+        [](const std::string& html, int width,
+           const std::string& default_font, int default_font_size,
+           const std::vector<std::string>& extra_fonts,
+           size_t image_cache_max_bytes, int image_timeout_ms,
+           size_t image_max_bytes, bool allow_http_images,
+           float dpi, int device_height,
+           const std::string& lang, const std::string& culture,
            int height, OutputFormat fmt, int quality, bool shrink_to_fit) -> py::object {
-            Renderer r(width,"Noto Sans",16,{},64*1024*1024,5000,10*1024*1024,
-                       true,96.0f,600,"en","en-US");
-            return r.render(html, base_url, height, fmt, quality, shrink_to_fit);
+            Renderer r(width, default_font, default_font_size, extra_fonts,
+                       image_cache_max_bytes, image_timeout_ms, image_max_bytes,
+                       allow_http_images, dpi, device_height, lang, culture);
+            return r.render(html, height, fmt, quality, shrink_to_fit);
         },
         py::arg("html"), py::arg("width"),
-        py::arg("base_url")      = "",
-        py::arg("height")        = 0,
-        py::arg("fmt")           = OutputFormat::PNG,
-        py::arg("quality")       = 85,
-        py::arg("shrink_to_fit") = true);
+        py::arg("default_font")          = "Noto Sans",
+        py::arg("default_font_size")     = 16,
+        py::arg("extra_fonts")           = std::vector<std::string>{},
+        py::arg("image_cache_max_bytes") = 64*1024*1024,
+        py::arg("image_timeout_ms")      = 5000,
+        py::arg("image_max_bytes")       = 10*1024*1024,
+        py::arg("allow_http_images")     = true,
+        py::arg("dpi")                   = 96.0f,
+        py::arg("device_height")         = 600,
+        py::arg("lang")                  = "en",
+        py::arg("culture")               = "en-US",
+        py::arg("height")                = 0,
+        py::arg("fmt")                   = OutputFormat::PNG,
+        py::arg("quality")               = 85,
+        py::arg("shrink_to_fit")         = true);
 }

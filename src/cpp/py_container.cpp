@@ -47,9 +47,8 @@ void PyContainer::create_surface(int w, int h) {
     cairo_paint(cr_);
 }
 
-int PyContainer::render(const std::string& html, const std::string& base_url,
+int PyContainer::render(const std::string& html,
                         int fixed_height, bool shrink_to_fit) {
-    base_url_ = base_url;
     create_surface(width_, 1);  // minimal surface needed for text metrics
 
     auto doc = litehtml::document::createFromString(html, this);
