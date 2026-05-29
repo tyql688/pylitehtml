@@ -30,6 +30,11 @@ if(NOT WebP_FOUND)
   pkg_check_modules(WEBP REQUIRED IMPORTED_TARGET libwebp)
 endif()
 
+# OpenSSL: enables HTTPS fetching (images / CSS) in the vendored cpp-httplib.
+# Optional — without it the build still works, but https:// resources are
+# skipped (never an error). Most real-world images are https, so prefer having it.
+find_package(OpenSSL QUIET)
+
 # ── litehtml ──────────────────────────────────────────────────────────────────
 set(LITEHTML_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/litehtml)
@@ -76,6 +81,14 @@ if(TARGET WebP::webp)
   target_link_libraries(_core PRIVATE WebP::webp)
 elseif(TARGET PkgConfig::WEBP)
   target_link_libraries(_core PRIVATE PkgConfig::WEBP)
+endif()
+
+if(OpenSSL_FOUND)
+  message(STATUS "pylitehtml: OpenSSL found — HTTPS fetching enabled")
+  target_compile_definitions(_core PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+  target_link_libraries(_core PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+else()
+  message(STATUS "pylitehtml: OpenSSL not found — https:// resources will be skipped")
 endif()
 
 # stdc++fs on older Linux toolchains

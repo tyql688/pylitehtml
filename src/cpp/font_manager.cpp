@@ -1,4 +1,3 @@
-// src/cpp/font_manager.cpp
 #include "font_manager.h"
 #include <pango/pangocairo.h>
 #include <filesystem>

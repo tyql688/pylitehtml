@@ -1,4 +1,3 @@
-// src/cpp/encode.h
 #pragma once
 #include <cairo.h>
 #include <vector>

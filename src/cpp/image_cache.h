@@ -1,4 +1,3 @@
-// src/cpp/image_cache.h
 #pragma once
 #include <cairo.h>
 #include <list>
@@ -21,10 +20,14 @@ public:
     explicit ImageCache(Config cfg);
     ~ImageCache();
 
-    // Returns non-owning pointer valid for lifetime of this cache, or nullptr.
+    // Returns an OWNED surface reference (already cairo_surface_reference'd), or
+    // nullptr. The caller MUST cairo_surface_destroy() it when done. This keeps
+    // the surface alive even if another thread evicts the cache entry mid-use,
+    // making concurrent renders that share one cache safe.
     cairo_surface_t* get(const std::string& url, const std::string& base_url);
 
     bool allow_http() const { return cfg_.allow_http; }
+    int  timeout_ms() const { return cfg_.timeout_ms; }
 
 private:
     struct Entry {

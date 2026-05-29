@@ -1,4 +1,3 @@
-// src/cpp/font_manager.h
 #pragma once
 #include <fontconfig/fontconfig.h>
 #include <mutex>
@@ -6,6 +5,13 @@
 #include <string>
 #include <vector>
 
+// Thread-safety note: fontconfig state is PROCESS-GLOBAL. The base config
+// (system config + the bundled fonts dir) is built once via call_once for the
+// first FontManager; later instances reuse it. Registering `extra_fonts`
+// mutates and rebuilds that global config under fc_mutex_. Because Pango reads
+// the global config during GIL-released renders WITHOUT that lock, you must
+// construct all Renderers (especially with extra_fonts) BEFORE rendering
+// concurrently — i.e. "thread-safe after construction", not during it.
 class FontManager {
 public:
     struct Config {

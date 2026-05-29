@@ -1,4 +1,3 @@
-// src/cpp/py_container.cpp
 #include "py_container.h"
 #include "base64.h"
 #include <pango/pangocairo.h>
@@ -28,11 +27,14 @@ PyContainer::PyContainer(FontManager& fm, ImageCache& ic, int width,
 
 PyContainer::~PyContainer() {
     fonts_.clear();
+    if (measure_layout_) g_object_unref(measure_layout_);
     if (cr_)      cairo_destroy(cr_);
     if (surface_) cairo_surface_destroy(surface_);
 }
 
 void PyContainer::create_surface(int w, int h) {
+    // The measure layout is bound to cr_; drop it so it is rebuilt lazily.
+    if (measure_layout_) { g_object_unref(measure_layout_); measure_layout_ = nullptr; }
     if (cr_)      { cairo_destroy(cr_); cr_ = nullptr; }
     if (surface_) { cairo_surface_destroy(surface_); surface_ = nullptr; }
     surface_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
@@ -42,7 +44,6 @@ void PyContainer::create_surface(int w, int h) {
     cr_ = cairo_create(surface_);
     if (cairo_status(cr_) != CAIRO_STATUS_SUCCESS)
         throw std::runtime_error("Cairo context create failed");
-    // White background
     cairo_set_source_rgb(cr_, 1, 1, 1);
     cairo_paint(cr_);
 }
@@ -92,23 +93,39 @@ litehtml::uint_ptr PyContainer::create_font(const litehtml::font_description& de
     pango_font_description_set_weight(handle->desc,
         static_cast<PangoWeight>(descr.weight));
 
-    // Store text decoration info using text_decoration_line flags
     handle->underline     = (descr.decoration_line & litehtml::text_decoration_line_underline) != 0;
     handle->strikethrough = (descr.decoration_line & litehtml::text_decoration_line_line_through) != 0;
     handle->overline      = (descr.decoration_line & litehtml::text_decoration_line_overline) != 0;
 
-    // Measure font metrics
-    if (fm_out) {
-        assert(cr_ != nullptr && "create_font called before create_surface");
+    // Always compute `ascent` (draw_text aligns runs to pos.y + ascent), not
+    // only when litehtml requests fm_out.
+    if (cr_) {
         PangoLayout* layout = pango_cairo_create_layout(cr_);
         pango_layout_set_font_description(layout, handle->desc);
         PangoContext* pango_ctx = pango_layout_get_context(layout);
         PangoFontMetrics* metrics = pango_context_get_metrics(pango_ctx, handle->desc, nullptr);
-        fm_out->ascent   = static_cast<litehtml::pixel_t>(PANGO_PIXELS(pango_font_metrics_get_ascent(metrics)));
-        fm_out->descent  = static_cast<litehtml::pixel_t>(PANGO_PIXELS(pango_font_metrics_get_descent(metrics)));
-        fm_out->height   = fm_out->ascent + fm_out->descent;
-        fm_out->x_height = fm_out->ascent / 2.0f;
-        fm_out->font_size = descr.size;
+        // Keep sub-pixel precision: litehtml's pixel_t is float, so divide the
+        // raw Pango units by PANGO_SCALE instead of rounding with PANGO_PIXELS.
+        const float ascent  = pango_font_metrics_get_ascent(metrics)  / float(PANGO_SCALE);
+        const float descent = pango_font_metrics_get_descent(metrics) / float(PANGO_SCALE);
+        handle->ascent = ascent;
+
+        if (fm_out) {
+            fm_out->ascent    = static_cast<litehtml::pixel_t>(ascent);
+            fm_out->descent   = static_cast<litehtml::pixel_t>(descent);
+            fm_out->height    = static_cast<litehtml::pixel_t>(ascent + descent);
+            fm_out->font_size = descr.size;
+
+            // Real x-height: measure the ink height of 'x' (sub-pixel) rather
+            // than guessing ascent/2. Affects the CSS `ex` unit and vertical-align.
+            pango_layout_set_text(layout, "x", 1);
+            PangoRectangle ink{};
+            pango_layout_get_extents(layout, &ink, nullptr);
+            fm_out->x_height = (ink.height > 0)
+                ? ink.height / float(PANGO_SCALE)
+                : ascent / 2.0f;
+        }
+
         pango_font_metrics_unref(metrics);
         g_object_unref(layout);
     }
@@ -125,13 +142,15 @@ void PyContainer::delete_font(litehtml::uint_ptr hFont) {
 litehtml::pixel_t PyContainer::text_width(const char* text, litehtml::uint_ptr hFont) {
     auto it = fonts_.find(hFont);
     if (it == fonts_.end() || !cr_) return 0;
-    PangoLayout* layout = pango_cairo_create_layout(cr_);
-    pango_layout_set_font_description(layout, it->second->desc);
-    pango_layout_set_text(layout, text, -1);
+    // Reuse one layout across calls — text_width is on the layout hot path.
+    if (!measure_layout_) measure_layout_ = pango_cairo_create_layout(cr_);
+    pango_layout_set_font_description(measure_layout_, it->second->desc);
+    pango_layout_set_text(measure_layout_, text, -1);
     int w = 0, h = 0;
-    pango_layout_get_pixel_size(layout, &w, &h);
-    g_object_unref(layout);
-    return static_cast<litehtml::pixel_t>(w);
+    // Sub-pixel width: pango_layout_get_size is in Pango units; rounding to
+    // whole pixels here would drift text layout and break wrapping/alignment.
+    pango_layout_get_size(measure_layout_, &w, &h);
+    return static_cast<litehtml::pixel_t>(w) / float(PANGO_SCALE);
 }
 
 void PyContainer::draw_text(litehtml::uint_ptr, const char* text, litehtml::uint_ptr hFont,
@@ -143,26 +162,35 @@ void PyContainer::draw_text(litehtml::uint_ptr, const char* text, litehtml::uint
     cairo_save(cr_);
     cairo_set_source_rgba(cr_, color.red/255.0, color.green/255.0,
                           color.blue/255.0, color.alpha/255.0);
-    cairo_move_to(cr_, pos.x, pos.y);
 
     PangoLayout* layout = pango_cairo_create_layout(cr_);
     pango_layout_set_font_description(layout, fh.desc);
     pango_layout_set_text(layout, text, -1);
+
+    // Pin every run to litehtml's baseline (pos.y + ascent). A layout's own
+    // top-to-baseline distance varies by script, so drawing all layouts at pos.y
+    // makes CJK drift relative to Latin ("飞").
+    const double layout_baseline = pango_layout_get_baseline(layout) / double(PANGO_SCALE);
+    const double baseline_y = pos.y + fh.ascent;       // litehtml's text baseline
+    const double draw_y = baseline_y - layout_baseline;
+    cairo_move_to(cr_, pos.x, draw_y);
     pango_cairo_show_layout(cr_, layout);
 
-    // Draw text decorations
+    // Decorations are placed against the same baseline.
     if (fh.underline || fh.strikethrough || fh.overline) {
         int w = 0, h = 0;
         pango_layout_get_pixel_size(layout, &w, &h);
         cairo_set_line_width(cr_, 1.0);
         if (fh.underline) {
-            cairo_move_to(cr_, pos.x, pos.y + h);
-            cairo_line_to(cr_, pos.x + w, pos.y + h);
+            const double y = baseline_y + 1.0;
+            cairo_move_to(cr_, pos.x, y);
+            cairo_line_to(cr_, pos.x + w, y);
             cairo_stroke(cr_);
         }
         if (fh.strikethrough) {
-            cairo_move_to(cr_, pos.x, pos.y + h / 2.0);
-            cairo_line_to(cr_, pos.x + w, pos.y + h / 2.0);
+            const double y = baseline_y - fh.ascent * 0.3;  // ~mid x-height
+            cairo_move_to(cr_, pos.x, y);
+            cairo_line_to(cr_, pos.x + w, y);
             cairo_stroke(cr_);
         }
         if (fh.overline) {
@@ -187,32 +215,38 @@ const char* PyContainer::get_default_font_name() const {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
+// ic_.get() returns an OWNED surface reference (or nullptr); every caller below
+// is responsible for cairo_surface_destroy()'ing it. container_cairo's get_image
+// contract is the same (it destroys what we return), so this stays consistent.
 cairo_surface_t* PyContainer::get_image(const std::string& url) {
     return ic_.get(url, base_url_);
 }
 
 void PyContainer::load_image(const char* src, const char* baseurl, bool) {
-    ic_.get(src ? src : "", baseurl ? baseurl : base_url_);
+    // Warm the cache, then release our reference immediately.
+    cairo_surface_t* s = ic_.get(src ? src : "", baseurl ? baseurl : base_url_);
+    if (s) cairo_surface_destroy(s);
 }
 void PyContainer::get_image_size(const char* src, const char* baseurl, litehtml::size& sz) {
     cairo_surface_t* s = ic_.get(src ? src : "", baseurl ? baseurl : base_url_);
     if (s) {
         sz.width  = static_cast<litehtml::pixel_t>(cairo_image_surface_get_width(s));
         sz.height = static_cast<litehtml::pixel_t>(cairo_image_surface_get_height(s));
+        cairo_surface_destroy(s);
     }
 }
-// ic_.get() returns a non-owning pointer valid for the lifetime of ic_.
-// Do not cache or store this pointer beyond this function.
 void PyContainer::draw_image(litehtml::uint_ptr, const litehtml::background_layer& layer,
                               const std::string& url, const std::string& base_url) {
     cairo_surface_t* img = ic_.get(url, base_url.empty() ? base_url_ : base_url);
-    if (!img || !cr_) return;
+    if (!img) return;
+    if (!cr_) { cairo_surface_destroy(img); return; }
     cairo_save(cr_);
     cairo_set_source_surface(cr_, img, layer.origin_box.x, layer.origin_box.y);
     cairo_rectangle(cr_, layer.border_box.x, layer.border_box.y,
                     layer.border_box.width, layer.border_box.height);
     cairo_fill(cr_);
     cairo_restore(cr_);
+    cairo_surface_destroy(img);
 }
 
 // ── CSS / Base URL ────────────────────────────────────────────────────────────
@@ -257,7 +291,7 @@ void PyContainer::import_css(litehtml::string& text, const litehtml::string& url
             auto slash = effective_base.rfind('/');
             abs_url = effective_base.substr(0, slash + 1) + url;
         }
-        text = http_util::fetch(abs_url, 5000);
+        text = http_util::fetch(abs_url, ic_.timeout_ms());
         return;
     }
 }

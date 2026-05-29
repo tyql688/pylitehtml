@@ -1,4 +1,3 @@
-// src/cpp/image_cache.cpp
 #include "image_cache.h"
 #include "base64.h"
 #include <cairo.h>
@@ -34,11 +33,12 @@ cairo_surface_t* ImageCache::get(const std::string& url, const std::string& base
     std::string key = resolve(url, base_url);
     if (key.empty()) return nullptr;
 
-    // Fast path: shared lock
+    // Fast path: shared lock. Hand back an extra reference so the surface
+    // survives even if another thread evicts this entry right after we unlock.
     {
         std::shared_lock lk(mu_);
         auto it = map_.find(key);
-        if (it != map_.end()) return it->second.surface;
+        if (it != map_.end()) return cairo_surface_reference(it->second.surface);
     }
 
     // Slow path: load then exclusive lock
@@ -49,19 +49,25 @@ cairo_surface_t* ImageCache::get(const std::string& url, const std::string& base
         cairo_image_surface_get_stride(surface)) *
         cairo_image_surface_get_height(surface);
 
+    // A single image larger than the whole budget is never cached (it would
+    // evict everything and still blow the bound). Hand the owned surface to the
+    // caller directly without inserting.
+    if (img_bytes > cfg_.max_bytes) return surface;
+
     std::unique_lock lk(mu_);
     // Double-check
     auto it = map_.find(key);
     if (it != map_.end()) {
         cairo_surface_destroy(surface);
-        return it->second.surface;
+        return cairo_surface_reference(it->second.surface);
     }
 
     evict_to_fit(img_bytes);
     insertion_order_.push_back(key);
     map_[key] = {surface, img_bytes};
     used_bytes_ += img_bytes;
-    return surface;
+    // map_ holds one reference; return a second one to the caller.
+    return cairo_surface_reference(surface);
 }
 
 void ImageCache::evict_to_fit(size_t needed) {
@@ -81,13 +87,44 @@ std::string ImageCache::resolve(const std::string& url, const std::string& base_
     if (url.empty()) return {};
     // data: URIs are self-contained; return as-is without base resolution
     if (url.rfind("data:", 0) == 0) return url;
-    if (url.find("://") != std::string::npos) return url;
-    if (url[0] == '/') return "file://" + url;
-    if (base_url.rfind("file://", 0) == 0) {
+
+    const bool base_is_file = base_url.rfind("file://", 0) == 0;
+    const bool base_is_http = base_url.rfind("http://", 0) == 0 ||
+                              base_url.rfind("https://", 0) == 0;
+
+    // Absolute URL with an explicit scheme.
+    if (url.find("://") != std::string::npos) {
+        // file:// only honoured under a file:// base (render_file); blocked for
+        // bare HTML strings so untrusted markup can't read local files.
+        if (url.rfind("file://", 0) == 0 && !base_is_file) return {};
+        return url;
+    }
+
+    // Root-relative URL ("/path"): resolve against the base's origin/root.
+    if (url[0] == '/') {
+        if (base_is_http) {
+            // scheme://host  — strip the path, keep the origin.
+            auto scheme_end = base_url.find("://");
+            auto host_end   = base_url.find('/', scheme_end + 3);
+            std::string origin = (host_end == std::string::npos)
+                                     ? base_url : base_url.substr(0, host_end);
+            return origin + url;
+        }
+        if (base_is_file) return "file://" + url;  // filesystem root
+        return {};  // no base → refuse to touch the local filesystem
+    }
+
+    // Document-relative URL.
+    if (base_is_file) {
         fs::path base = fs::path(base_url.substr(7)).parent_path();
         return "file://" + (base / url).string();
     }
-    if (base_url.rfind("http://", 0) == 0 || base_url.rfind("https://", 0) == 0) {
+    if (base_is_http) {
+        // Strip the last path segment. Guard the no-path case ("http://host"),
+        // where rfind('/') would otherwise land on the "://" slash.
+        auto scheme_end = base_url.find("://");
+        auto path_start = base_url.find('/', scheme_end + 3);
+        if (path_start == std::string::npos) return base_url + "/" + url;
         auto slash = base_url.rfind('/');
         return base_url.substr(0, slash + 1) + url;
     }
@@ -187,7 +224,11 @@ cairo_surface_t* ImageCache::load_jpeg_mem(const uint8_t* data, size_t size) {
     cinfo.err = jpeg_std_error(&jerr.pub);
     jerr.pub.error_exit = err_exit;
 
+    // `surf` is volatile so the setjmp branch can free it safely: a non-volatile
+    // local modified after setjmp has an indeterminate value after longjmp.
+    cairo_surface_t* volatile surf = nullptr;
     if (setjmp(jerr.jmpbuf)) {
+        if (surf) cairo_surface_destroy(const_cast<cairo_surface_t*>(surf));
         jpeg_destroy_decompress(&cinfo);
         return nullptr;
     }
@@ -198,17 +239,28 @@ cairo_surface_t* ImageCache::load_jpeg_mem(const uint8_t* data, size_t size) {
     cinfo.out_color_space = JCS_RGB;
     jpeg_start_decompress(&cinfo);
 
-    int w = cinfo.output_width, h = cinfo.output_height;
-    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-    cairo_surface_flush(surf);
-    uint8_t* dst = cairo_image_surface_get_data(surf);
-    int stride = cairo_image_surface_get_stride(surf);
+    const int w = static_cast<int>(cinfo.output_width);
+    const int h = static_cast<int>(cinfo.output_height);
+    if (w <= 0 || h <= 0) { jpeg_destroy_decompress(&cinfo); return nullptr; }
 
-    std::vector<uint8_t> row_buf(w * 3);
+    surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    // A decompression bomb can declare huge dimensions; Cairo then returns an
+    // error surface with a NULL data pointer. Guard before writing pixels.
+    if (cairo_surface_status(const_cast<cairo_surface_t*>(surf)) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(const_cast<cairo_surface_t*>(surf));
+        jpeg_destroy_decompress(&cinfo);
+        return nullptr;
+    }
+    cairo_surface_flush(const_cast<cairo_surface_t*>(surf));
+    uint8_t* dst = cairo_image_surface_get_data(const_cast<cairo_surface_t*>(surf));
+    const size_t stride = static_cast<size_t>(
+        cairo_image_surface_get_stride(const_cast<cairo_surface_t*>(surf)));
+
+    std::vector<uint8_t> row_buf(static_cast<size_t>(w) * 3);
     while (cinfo.output_scanline < static_cast<JDIMENSION>(h)) {
         JSAMPROW p = row_buf.data();
         jpeg_read_scanlines(&cinfo, &p, 1);
-        int y = cinfo.output_scanline - 1;
+        const size_t y = static_cast<size_t>(cinfo.output_scanline - 1);
         uint8_t* out = dst + y * stride;
         for (int x = 0; x < w; ++x) {
             out[x*4+0] = row_buf[x*3+2]; // B
@@ -217,25 +269,31 @@ cairo_surface_t* ImageCache::load_jpeg_mem(const uint8_t* data, size_t size) {
             out[x*4+3] = 255;             // A
         }
     }
-    cairo_surface_mark_dirty(surf);
+    cairo_surface_mark_dirty(const_cast<cairo_surface_t*>(surf));
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
-    return surf;
+    return const_cast<cairo_surface_t*>(surf);
 }
 
 cairo_surface_t* ImageCache::load_webp_mem(const uint8_t* data, size_t size) {
     int w = 0, h = 0;
     uint8_t* rgba = WebPDecodeRGBA(data, size, &w, &h);
     if (!rgba) return nullptr;
+    if (w <= 0 || h <= 0) { free(rgba); return nullptr; }
 
     cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(surf);
+        free(rgba);
+        return nullptr;
+    }
     cairo_surface_flush(surf);
     uint8_t* dst = cairo_image_surface_get_data(surf);
-    int stride = cairo_image_surface_get_stride(surf);
+    const size_t stride = static_cast<size_t>(cairo_image_surface_get_stride(surf));
 
     for (int y = 0; y < h; ++y) {
-        const uint8_t* src = rgba + y * w * 4;
-        uint8_t* out = dst + y * stride;
+        const uint8_t* src = rgba + static_cast<size_t>(y) * w * 4;
+        uint8_t* out = dst + static_cast<size_t>(y) * stride;
         for (int x = 0; x < w; ++x) {
             uint8_t r = src[x*4+0], g = src[x*4+1],
                     b = src[x*4+2], a = src[x*4+3];
@@ -272,7 +330,6 @@ cairo_surface_t* ImageCache::load_svg_mem(const uint8_t* data, size_t size) {
     cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, iw, ih);
     cairo_t* cr = cairo_create(surf);
 
-    // White background
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_paint(cr);
 

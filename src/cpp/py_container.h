@@ -1,4 +1,3 @@
-// src/cpp/py_container.h
 #pragma once
 #include "container_cairo.h"       // from third_party/litehtml/containers/cairo/
 #include "font_manager.h"
@@ -14,6 +13,11 @@ struct FontHandle {
     bool underline                   = false;
     bool strikethrough               = false;
     bool overline                    = false;
+    // Ascent reported to litehtml for this font. Used to align every drawn run
+    // to a common baseline (pos.y + ascent), so mixed CJK/Latin text — which
+    // litehtml emits as separate runs whose Pango layouts have differing
+    // top-to-baseline offsets — does not drift vertically.
+    float ascent                     = 0.0f;
 
     ~FontHandle() { if (desc) pango_font_description_free(desc); }
     FontHandle(const FontHandle&) = delete;
@@ -96,6 +100,10 @@ private:
 
     cairo_surface_t* surface_ = nullptr;
     cairo_t*         cr_      = nullptr;
+
+    // Reusable layout for text_width(); recreated whenever cr_ changes.
+    // Avoids allocating a fresh PangoLayout on every measurement call.
+    PangoLayout*     measure_layout_ = nullptr;
 
     // Font ID → FontHandle (owned)
     std::unordered_map<litehtml::uint_ptr, std::unique_ptr<FontHandle>> fonts_;

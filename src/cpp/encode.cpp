@@ -1,4 +1,3 @@
-// src/cpp/encode.cpp
 #include "encode.h"
 #include <cstdio>   // FILE — required before jpeglib.h
 #include <jpeglib.h>
@@ -40,11 +39,13 @@ std::vector<uint8_t> to_jpeg(cairo_surface_t* surface, int quality) {
     int stride = cairo_image_surface_get_stride(surface);
     const uint8_t* src = cairo_image_surface_get_data(surface);
 
-    // Build RGB buffer (flatten alpha on white background)
-    std::vector<uint8_t> rgb(w * h * 3);
+    // Build RGB buffer (flatten alpha on white background). size_t math avoids
+    // int overflow on very large surfaces.
+    const size_t rowstride = static_cast<size_t>(w) * 3;
+    std::vector<uint8_t> rgb(rowstride * static_cast<size_t>(h));
     for (int y = 0; y < h; ++y) {
-        const uint8_t* row = src + y * stride;
-        uint8_t* out = rgb.data() + y * w * 3;
+        const uint8_t* row = src + static_cast<size_t>(y) * stride;
+        uint8_t* out = rgb.data() + static_cast<size_t>(y) * rowstride;
         for (int x = 0; x < w; ++x) {
             // Cairo ARGB32 LE: [B, G, R, A]
             float a = row[x*4+3] / 255.0f;
@@ -59,18 +60,20 @@ std::vector<uint8_t> to_jpeg(cairo_surface_t* surface, int quality) {
     cinfo.err = jpeg_std_error(&jerr.pub);
     jerr.pub.error_exit = jpeg_error_exit;
 
+    // volatile so the buffer can be freed in the error branch after longjmp.
+    unsigned char* volatile mem = nullptr;
+    unsigned long mem_size = 0;
     if (setjmp(jerr.jmpbuf)) {
         jpeg_destroy_compress(&cinfo);
+        if (mem) free(const_cast<unsigned char*>(mem));
         throw std::runtime_error("JPEG encode error");
     }
 
     jpeg_create_compress(&cinfo);
-    uint8_t* mem = nullptr;
-    unsigned long mem_size = 0;
-    jpeg_mem_dest(&cinfo, &mem, &mem_size);
+    jpeg_mem_dest(&cinfo, const_cast<unsigned char**>(&mem), &mem_size);
 
-    cinfo.image_width = w;
-    cinfo.image_height = h;
+    cinfo.image_width = static_cast<JDIMENSION>(w);
+    cinfo.image_height = static_cast<JDIMENSION>(h);
     cinfo.input_components = 3;
     cinfo.in_color_space = JCS_RGB;
     jpeg_set_defaults(&cinfo);
@@ -78,14 +81,15 @@ std::vector<uint8_t> to_jpeg(cairo_surface_t* surface, int quality) {
     jpeg_start_compress(&cinfo, TRUE);
 
     while (cinfo.next_scanline < cinfo.image_height) {
-        JSAMPROW row = rgb.data() + cinfo.next_scanline * w * 3;
+        JSAMPROW row = rgb.data() + static_cast<size_t>(cinfo.next_scanline) * rowstride;
         jpeg_write_scanlines(&cinfo, &row, 1);
     }
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
 
-    std::vector<uint8_t> result(mem, mem + mem_size);
-    free(mem);
+    unsigned char* buf = const_cast<unsigned char*>(mem);
+    std::vector<uint8_t> result(buf, buf + mem_size);
+    free(buf);
     return result;
 }
 
@@ -97,10 +101,11 @@ std::vector<uint8_t> to_rgba(cairo_surface_t* surface) {
     int stride = cairo_image_surface_get_stride(surface);
     const uint8_t* src = cairo_image_surface_get_data(surface);
 
-    std::vector<uint8_t> rgba(w * h * 4);
+    const size_t rowstride = static_cast<size_t>(w) * 4;
+    std::vector<uint8_t> rgba(rowstride * static_cast<size_t>(h));
     for (int y = 0; y < h; ++y) {
-        const uint8_t* row = src + y * stride;
-        uint8_t* out = rgba.data() + y * w * 4;
+        const uint8_t* row = src + static_cast<size_t>(y) * stride;
+        uint8_t* out = rgba.data() + static_cast<size_t>(y) * rowstride;
         for (int x = 0; x < w; ++x) {
             out[x*4+0] = row[x*4+2]; // R
             out[x*4+1] = row[x*4+1]; // G

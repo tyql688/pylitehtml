@@ -1,4 +1,3 @@
-// src/cpp/base64.h
 #pragma once
 #include <cstdint>
 #include <string>
