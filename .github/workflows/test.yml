@@ -40,8 +40,8 @@ jobs:
 
       - name: Build and test
         run: |
-          pip install scikit-build-core pybind11 pytest pillow pytest-asyncio jinja2
-          pip install -e . --no-build-isolation
+          pip install scikit-build-core pybind11
+          pip install -e ".[dev]" --no-build-isolation   # pytest/pillow/numpy/…
           pytest tests/ -v
 
   test-windows:
