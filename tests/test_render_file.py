@@ -1,9 +1,9 @@
-# tests/test_render_file.py
 """Tests for render_file: local HTML files and Jinja2 templates."""
+
 import pathlib
 
 import pylitehtml
-from pylitehtml import Renderer, OutputFormat, RawResult
+from pylitehtml import OutputFormat, RawResult, Renderer
 
 TEMPLATES = pathlib.Path(__file__).parent / "assets" / "templates"
 

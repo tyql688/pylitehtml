@@ -1,9 +1,8 @@
-# tests/test_fonts.py
 import pathlib
 import shutil
 
 import pylitehtml
-from pylitehtml import Renderer, FontConfig, OutputFormat, RawResult
+from pylitehtml import FontConfig, OutputFormat, RawResult, Renderer
 
 FONTS_DIR = pathlib.Path(pylitehtml.__file__ or "").parent / "fonts"
 

@@ -1,5 +1,5 @@
-# tests/conftest.py
 import pytest
+
 from pylitehtml import Renderer
 
 SIMPLE_HTML = """<html><style>
@@ -17,9 +17,11 @@ FLEX_HTML = """<html><style>
   <div class="box" style="background:#af4"></div>
 </div></body></html>"""
 
+
 @pytest.fixture(scope="session")
 def renderer() -> Renderer:
     return Renderer(width=800)
+
 
 @pytest.fixture
 def simple_html() -> str:

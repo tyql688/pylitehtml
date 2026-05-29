@@ -1,10 +1,10 @@
-# tests/test_images.py
 import pathlib
 import time
 
 import pytest
 from PIL import Image
-from pylitehtml import Renderer, ImageConfig
+
+from pylitehtml import ImageConfig, Renderer
 
 ASSETS = pathlib.Path(__file__).parent / "assets"
 
@@ -13,7 +13,7 @@ ASSETS = pathlib.Path(__file__).parent / "assets"
 def create_assets() -> None:
     ASSETS.mkdir(exist_ok=True)
     Image.new("RGBA", (10, 10), (255, 0, 0, 255)).save(ASSETS / "red.png")
-    Image.new("RGB",  (10, 10), (0, 0, 255)).save(ASSETS / "blue.jpg")
+    Image.new("RGB", (10, 10), (0, 0, 255)).save(ASSETS / "blue.jpg")
 
 
 def test_local_png() -> None:

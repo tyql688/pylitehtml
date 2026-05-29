@@ -1,28 +1,35 @@
-# tests/test_new_features.py
 """Tests for data: URI images, SVG, CSS @import, DPI/locale config, shrink_to_fit."""
+
 import base64
 import io
 import pathlib
 
 from PIL import Image
-from pylitehtml import Renderer, ImageConfig, OutputFormat, RawResult
+
+from pylitehtml import ImageConfig, OutputFormat, RawResult, Renderer
 
 ASSETS = pathlib.Path(__file__).parent / "assets"
 
 
-def _make_png_bytes(color: tuple[int, int, int] = (255, 0, 0), size: tuple[int, int] = (10, 10)) -> bytes:
+def _make_png_bytes(
+    color: tuple[int, int, int] = (255, 0, 0), size: tuple[int, int] = (10, 10)
+) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", size, color).save(buf, format="PNG")
     return buf.getvalue()
 
 
-def _make_jpeg_bytes(color: tuple[int, int, int] = (0, 0, 255), size: tuple[int, int] = (10, 10)) -> bytes:
+def _make_jpeg_bytes(
+    color: tuple[int, int, int] = (0, 0, 255), size: tuple[int, int] = (10, 10)
+) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", size, color).save(buf, format="JPEG")
     return buf.getvalue()
 
 
-def _make_webp_bytes(color: tuple[int, int, int] = (0, 255, 0), size: tuple[int, int] = (10, 10)) -> bytes:
+def _make_webp_bytes(
+    color: tuple[int, int, int] = (0, 255, 0), size: tuple[int, int] = (10, 10)
+) -> bytes:
     buf = io.BytesIO()
     Image.new("RGBA", size, (*color, 255)).save(buf, format="WEBP")
     return buf.getvalue()
@@ -34,6 +41,7 @@ def _data_uri(image_bytes: bytes, mime: str) -> str:
 
 
 # ── data: URI images ──────────────────────────────────────────────────────────
+
 
 def test_data_uri_png_image() -> None:
     r = Renderer(width=200)
@@ -108,6 +116,7 @@ def test_svg_no_size_attribute() -> None:
 
 # ── device_height ─────────────────────────────────────────────────────────────
 
+
 def test_device_height_default() -> None:
     """Renderer with default device_height should produce a valid image."""
     r = Renderer(width=400)
@@ -126,6 +135,7 @@ def test_device_height_custom() -> None:
 
 # ── CSS @import data URI ──────────────────────────────────────────────────────
 
+
 def test_import_css_data_uri_base64() -> None:
     css_source = "body { background: #00ff00 !important; margin: 0; }"
     encoded = base64.b64encode(css_source.encode()).decode()
@@ -142,6 +152,7 @@ def test_import_css_data_uri_base64() -> None:
 
 
 # ── DPI configuration ─────────────────────────────────────────────────────────
+
 
 def test_dpi_default() -> None:
     """Renderer with default DPI should produce a valid image."""
@@ -165,6 +176,7 @@ def test_dpi_custom() -> None:
 
 
 # ── Language / locale configuration ──────────────────────────────────────────
+
 
 def test_locale_default() -> None:
     r = Renderer(width=400)
@@ -205,6 +217,7 @@ def test_image_cache_mb_parameter() -> None:
 
 
 # ── shrink_to_fit ──────────────────────────────────────────────────────────────
+
 
 def test_shrink_to_fit_narrow_content() -> None:
     """Content narrower than viewport should produce a narrower surface when shrink_to_fit=True."""
