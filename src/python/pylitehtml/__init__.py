@@ -43,12 +43,9 @@ if sys.platform == "win32":
             except OSError:
                 pass
 
-import jinja2  # noqa: E402
-
-from ._core import ImageFetchError, OutputFormat, RawResult  # noqa: E402
+from ._core import ImageFetchError, OutputFormat, RawResult, RenderError
 from ._core import Renderer as _CoreRenderer
-from ._core import RenderError  # noqa: E402
-from ._core import render as _render_core
+from ._jinja import render_template as _render_template
 
 __all__ = [
     "FontConfig",
@@ -60,7 +57,15 @@ __all__ = [
     "Renderer",
     "render",
     "render_file",
+    # Lightweight HTML → image helpers (core; no third-party deps).
+    "DEFAULT_CSS",
+    "wrap_html",
+    "html_to_png",
+    "html_to_image",
 ]
+# Note: markdown is intentionally NOT part of the core API. The optional
+# markdown_to_png() helper lives in the `pylitehtml.markdown` submodule and only
+# imports a markdown engine when actually called (or you pass your own).
 
 
 @dataclass(frozen=True)
@@ -68,13 +73,19 @@ class FontConfig:
     """Font configuration for the renderer."""
 
     default: str = "Noto Sans"
-    """Fallback font family name (must be installed or in *extra*)."""
+    """Fallback font family name (bundled, or installed, or listed in *extra*)."""
 
     size: int = 16
     """Default font size in pixels (used when CSS does not specify one)."""
 
     extra: list[str] = field(default_factory=list)
     """Additional font file paths (``.ttf`` / ``.otf``) to register."""
+
+    def __post_init__(self) -> None:
+        if not self.default or not self.default.strip():
+            raise ValueError("FontConfig.default must be a non-empty family name")
+        if self.size <= 0:
+            raise ValueError(f"FontConfig.size must be > 0, got {self.size}")
 
 
 @dataclass(frozen=True)
@@ -94,6 +105,14 @@ class ImageConfig:
     """Whether to fetch resources (images and CSS) over ``http://`` / ``https://``.
     Set to ``False`` to disable all network access."""
 
+    def __post_init__(self) -> None:
+        if self.cache_mb < 0:
+            raise ValueError(f"ImageConfig.cache_mb must be >= 0, got {self.cache_mb}")
+        if self.timeout_ms <= 0:
+            raise ValueError(f"ImageConfig.timeout_ms must be > 0, got {self.timeout_ms}")
+        if self.max_mb <= 0:
+            raise ValueError(f"ImageConfig.max_mb must be > 0, got {self.max_mb}")
+
 
 def _resolve_fmt(fmt: str | OutputFormat) -> OutputFormat:
     if isinstance(fmt, OutputFormat):
@@ -104,7 +123,7 @@ def _resolve_fmt(fmt: str | OutputFormat) -> OutputFormat:
     except KeyError:
         raise ValueError(
             f"Unknown fmt {fmt!r}. Use 'png', 'jpeg', 'raw', or OutputFormat."
-        )
+        ) from None
 
 
 def _split_locale(locale: str) -> tuple[str, str]:
@@ -139,6 +158,12 @@ class Renderer:
         fonts: FontConfig | None = None,
         images: ImageConfig | None = None,
     ) -> None:
+        if width <= 0:
+            raise ValueError(f"width must be > 0, got {width}")
+        if dpi <= 0:
+            raise ValueError(f"dpi must be > 0, got {dpi}")
+        if device_height <= 0:
+            raise ValueError(f"device_height must be > 0, got {device_height}")
         _fonts = fonts or FontConfig()
         _images = images or ImageConfig()
         lang, culture = _split_locale(locale)
@@ -174,6 +199,10 @@ class Renderer:
 
         For async usage: ``await asyncio.to_thread(r.render, html)``
         """
+        if not 1 <= quality <= 100:
+            raise ValueError(f"quality must be in 1..100, got {quality}")
+        if height < 0:
+            raise ValueError(f"height must be >= 0, got {height}")
         return self._r.render(
             html,
             height=height,
@@ -214,20 +243,20 @@ class Renderer:
             png = r.render_file("project/order.html", title="订单", items=[...])
         """
         resolved = Path(path).resolve()
-        html = resolved.read_text(encoding="utf-8")
-
         if template_data:
-            env = jinja2.Environment(
-                loader=jinja2.FileSystemLoader(resolved.parent),
-            )
-            html = env.get_template(resolved.name).render(**template_data)
+            html = _render_template(resolved, template_data)
+        else:
+            html = resolved.read_text(encoding="utf-8")
 
         # Inject <base> so litehtml resolves relative CSS/image paths.
         html = f'<base href="file://{resolved.as_posix()}">\n{html}'
 
         return self.render(
-            html, fmt=fmt, quality=quality,
-            height=height, shrink_to_fit=shrink_to_fit,
+            html,
+            fmt=fmt,
+            quality=quality,
+            height=height,
+            shrink_to_fit=shrink_to_fit,
         )
 
 
@@ -251,28 +280,14 @@ def render(
     For repeated rendering use :class:`Renderer` directly so font loading
     is paid only once.
     """
-    _fonts = fonts or FontConfig()
-    _images = images or ImageConfig()
-    lang, culture = _split_locale(locale)
-    return _render_core(
-        html,
+    return Renderer(
         width,
-        default_font=_fonts.default,
-        default_font_size=_fonts.size,
-        extra_fonts=_fonts.extra,
-        image_cache_max_bytes=int(_images.cache_mb * 1024 * 1024),
-        image_timeout_ms=_images.timeout_ms,
-        image_max_bytes=int(_images.max_mb * 1024 * 1024),
-        allow_http_images=_images.allow_http,
+        locale=locale,
         dpi=dpi,
         device_height=device_height,
-        lang=lang,
-        culture=culture,
-        height=height,
-        fmt=_resolve_fmt(fmt),
-        quality=quality,
-        shrink_to_fit=shrink_to_fit,
-    )
+        fonts=fonts,
+        images=images,
+    ).render(html, fmt=fmt, quality=quality, height=height, shrink_to_fit=shrink_to_fit)
 
 
 def render_file(
@@ -296,11 +311,28 @@ def render_file(
     Equivalent to ``Renderer(width, ...).render_file(path, ...)``.
     """
     r = Renderer(
-        width, locale=locale, dpi=dpi,
-        device_height=device_height, fonts=fonts, images=images,
+        width,
+        locale=locale,
+        dpi=dpi,
+        device_height=device_height,
+        fonts=fonts,
+        images=images,
     )
     return r.render_file(
-        path, fmt=fmt, quality=quality,
-        height=height, shrink_to_fit=shrink_to_fit,
+        path,
+        fmt=fmt,
+        quality=quality,
+        height=height,
+        shrink_to_fit=shrink_to_fit,
         **template_data,
     )
+
+
+# Lightweight HTML → image helpers. Imported last to avoid a circular import
+# (these modules import names defined above). No third-party dependencies.
+from ._html2png import (
+    DEFAULT_CSS,
+    html_to_image,
+    html_to_png,
+    wrap_html,
+)

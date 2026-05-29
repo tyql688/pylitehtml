@@ -1,20 +1,23 @@
 # src/python/pylitehtml/_core.pyi
 """Type stubs for the _core C extension module."""
+
 from enum import IntEnum
 
 class OutputFormat(IntEnum):
     """Output image format."""
+
     PNG = 0
     """PNG-encoded bytes. Lossless, best for screenshots."""
     JPEG = 1
     """JPEG-encoded bytes. Smaller files; use `quality` to control compression."""
     RAW = 2
-    """Uncompressed BGRA pixels (Cairo native channel order). Returns RawResult."""
+    """Uncompressed RGBA pixels, row-major. Returns RawResult."""
 
 class RawResult:
     """Returned when rendering with ``fmt=OutputFormat.RAW``."""
+
     data: bytes
-    """Raw BGRA pixel data, row-major. Channel order: B, G, R, A."""
+    """Raw RGBA pixel data, row-major. Channel order: R, G, B, A."""
     width: int
     """Image width in pixels."""
     height: int
@@ -131,7 +134,7 @@ class Renderer:
         bytes
             PNG or JPEG-encoded image data.
         RawResult
-            When *fmt* is :attr:`OutputFormat.RAW`: uncompressed BGRA pixels.
+            When *fmt* is :attr:`OutputFormat.RAW`: uncompressed RGBA pixels.
         """
 
 def render(
