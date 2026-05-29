@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylitehtml"
-version = "0.2.0"
+version = "0.2.1"
 description = "HTML+CSS to image renderer based on litehtml"
 readme = "README.md"
 license = { file = "LICENSE" }
