@@ -163,7 +163,7 @@ litehtml = CSS 2.1 + 部分 CSS3。下表为**实测**结论：
 | `background-image:url()`、`box-shadow`、`transform`、`opacity`、`letter-spacing` | ❌ |
 | CSS Grid、`var()`、`@font-face`、动画 / 过渡、`filter`、JavaScript | ❌ |
 
-> 图片抓取失败会自动跳过（不报错）；HTTPS 需构建期有 OpenSSL。
+> 图片抓取失败会自动跳过（不报错）；HTTPS 需构建期有 OpenSSL ≥ 3.0（官方 manylinux Linux wheel 为 http-only，macOS/Windows wheel 支持 https）。
 
 ---
 

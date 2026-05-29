@@ -83,12 +83,15 @@ elseif(TARGET PkgConfig::WEBP)
   target_link_libraries(_core PRIVATE PkgConfig::WEBP)
 endif()
 
-if(OpenSSL_FOUND)
-  message(STATUS "pylitehtml: OpenSSL found — HTTPS fetching enabled")
+# The vendored cpp-httplib requires OpenSSL >= 3.0 for TLS. manylinux_2_28 ships
+# OpenSSL 1.1.1, so gate the feature on the version: with < 3.0 (or none) HTTPS
+# is disabled and https:// resources are skipped gracefully (never a build error).
+if(OpenSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+  message(STATUS "pylitehtml: OpenSSL ${OPENSSL_VERSION} — HTTPS fetching enabled")
   target_compile_definitions(_core PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
   target_link_libraries(_core PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
-  message(STATUS "pylitehtml: OpenSSL not found — https:// resources will be skipped")
+  message(STATUS "pylitehtml: OpenSSL >= 3.0 not found — https:// resources will be skipped")
 endif()
 
 # stdc++fs on older Linux toolchains
