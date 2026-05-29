@@ -1,7 +1,7 @@
 name: Test
 on:
   push:
-    tags-ignore: ["v*"]
+    branches: ["**"]   # all branch pushes; tag pushes are handled by wheels.yml
   pull_request:
   workflow_dispatch:
 
