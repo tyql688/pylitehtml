@@ -8,7 +8,7 @@ completely as pylitehtml can — via a full markdown-it-py converter.
 What renders fully: headings, bold/italic/strikethrough, inline code, multiple
 tables, nested ordered/unordered lists, blockquotes, links + bare URLs, Windows
 paths with backslashes, and syntax-highlighted code (bash / TS / Python, plus a
-Cursor ``start:end:path`` fence shown with a caption).
+``start:end:path`` line-range fence shown with a caption).
 
 Honest limits (pylitehtml runs no JavaScript):
 * **Mermaid** diagrams cannot be drawn — they are shown as labelled source.
@@ -38,7 +38,7 @@ ASSETS = ROOT / "assets"
 DOC = Path(__file__).resolve().parent / "markdown.md"
 
 _FORMATTER = HtmlFormatter(style="friendly", nowrap=True)
-_CURSOR_REF = re.compile(r"^(\d+):(\d+):(.+)$")  # Cursor "start:end:path" fences
+_LINE_REF = re.compile(r"^(\d+):(\d+):(.+)$")  # `start:end:path` line-range fences
 
 # Extra styling on top of pylitehtml's DEFAULT_CSS (+ Pygments tokens).
 EXTRA_CSS = """
@@ -60,7 +60,7 @@ def _pygments_block(code: str, lexer) -> str:
 
 
 def _highlight(code: str, lang: str, _attrs: str) -> str:
-    """Fence renderer covering mermaid, Cursor refs, and normal languages."""
+    """Fence renderer covering mermaid, line-range fences, and normal languages."""
     name = (lang or "").strip()
     if name.lower() == "mermaid":
         kind = code.strip().split(None, 1)[0] if code.strip() else "diagram"
@@ -69,7 +69,7 @@ def _highlight(code: str, lang: str, _attrs: str) -> str:
             f'<div class="head">Mermaid · {kind}（无 JS，展示源码）</div>'
             f"<pre><code>{_escape(code)}</code></pre></div>"
         )
-    ref = _CURSOR_REF.match(name)
+    ref = _LINE_REF.match(name)
     if ref:
         start, end, path = ref.groups()
         try:
