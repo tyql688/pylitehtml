@@ -2,5 +2,7 @@
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.10",
+  "extraPaths": ["tests"],
+  "typeCheckingMode": "basic",
   "reportMissingModuleSource": "none"
 }

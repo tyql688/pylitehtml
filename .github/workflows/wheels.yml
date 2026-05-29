@@ -80,9 +80,9 @@ jobs:
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
           CIBW_BEFORE_ALL_LINUX: |
             yum install -y cairo-devel pango-devel fontconfig-devel \
-              libwebp-devel libjpeg-turbo-devel
+              libwebp-devel libjpeg-turbo-devel openssl-devel
           CIBW_BEFORE_ALL_MACOS: >
-            brew install cairo pango fontconfig webp jpeg-turbo pkg-config 2>/dev/null || true
+            brew install cairo pango fontconfig webp jpeg-turbo openssl@3 pkg-config 2>/dev/null || true
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: "delocate-wheel --require-target-macos-version 15.0 -w {dest_dir} {wheel}"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
@@ -96,8 +96,33 @@ jobs:
           name: wheels-${{ matrix.os }}-${{ matrix.arch }}
           path: ./wheelhouse/*.whl
 
+  make_sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { submodules: recursive }   # sdist bundles third_party/litehtml
+      - run: pipx run build --sdist
+      - uses: actions/upload-artifact@v7
+        with: { name: sdist, path: dist/*.tar.gz }
+
+  publish:
+    name: Publish to PyPI
+    needs: [build_wheels, make_sdist]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi
+    permissions:
+      id-token: write          # OIDC — PyPI Trusted Publishing (no API token)
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { pattern: wheels-*, merge-multiple: true, path: dist/ }
+      - uses: actions/download-artifact@v8
+        with: { name: sdist, path: dist/ }
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
   release:
-    needs: build_wheels
+    needs: publish
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -105,9 +130,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with: { pattern: wheels-*, merge-multiple: true, path: dist/ }
-
+      - uses: actions/download-artifact@v8
+        with: { name: sdist, path: dist/ }
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.whl
+          files: dist/*
           generate_release_notes: true

@@ -4,11 +4,13 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylitehtml"
-version = "0.1.0"
+version = "0.2.0"
 description = "HTML+CSS to image renderer based on litehtml"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
+authors = [{ name = "tyql688" }]
+keywords = ["html", "css", "render", "image", "png", "litehtml", "screenshot", "markdown"]
 dependencies = ["jinja2>=3.0"]
 classifiers = [
   "Programming Language :: Python :: 3.10",
@@ -22,19 +24,58 @@ classifiers = [
   "Typing :: Typed",
 ]
 
+[project.urls]
+Homepage = "https://github.com/tyql688/pylitehtml"
+Repository = "https://github.com/tyql688/pylitehtml"
+Issues = "https://github.com/tyql688/pylitehtml/issues"
+
 [project.optional-dependencies]
-dev = ["pytest", "pillow", "numpy", "pytest-asyncio"]
+dev = ["pytest", "pillow", "numpy", "pytest-asyncio", "ruff"]
+
+# Local-only dev groups (PEP 735) — NOT published as package extras, because the
+# library itself depends on none of these. They only run the repo's scripts:
+#   uv pip install --group examples   # examples/ (markdown-it-py, pygments, …)
+#   uv pip install --group bench      # bench/    (playwright)
+[dependency-groups]
+examples = ["markdown-it-py", "mdit-py-plugins", "linkify-it-py", "pygments"]
+bench = ["playwright"]
 
 [tool.scikit-build]
 cmake.build-type = "Release"
+build.verbose = true
 wheel.packages = ["src/python/pylitehtml"]
-cmake.verbose = true
+# litehtml's own install() rules leak gumbo headers / cmake configs / libs into
+# the wheel. We only ship the pylitehtml/ package (the _core extension + fonts);
+# drop everything else CMake installs.
+wheel.exclude = ["include/**", "lib/**", "bin/**", "share/**"]
+# Keep the sdist lean: it needs the build inputs (src, third_party, CMake, fonts),
+# not repo extras like rendered images, CI config, examples or benchmarks.
+sdist.exclude = ["assets", ".github", "bench", "examples", "tests", ".gitignore", ".gitmodules"]
 
 [tool.scikit-build.cmake.define]
 LITEHTML_BUILD_TESTING = "OFF"
 
 [tool.ruff]
 target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "C4"]
+# E501 (line too long) is left to the formatter; long CSS/HTML string literals
+# in examples are intentionally not wrapped.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# __init__ must import the C extension only AFTER setting the Windows DLL path,
+# so module-level imports legitimately follow code (E402). Kept here instead of
+# scattering `# noqa` on every import line.
+"src/python/pylitehtml/__init__.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pylitehtml"]
+
+[tool.ruff.format]
+docstring-code-format = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
