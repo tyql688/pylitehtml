@@ -194,34 +194,39 @@ SVG_CIRCLE = (
 
 
 def test_svg_data_uri() -> None:
-    """SVG embedded as base64 data URI should render a red circle."""
+    """SVG embedded as base64 data URI renders REAL pixels (red circle center)."""
     r = Renderer(width=200)
     uri = _data_uri(SVG_CIRCLE, "image/svg+xml")
-    html = f'<img src="{uri}" width="100" height="100">'
-    raw = r.render(html, fmt=OutputFormat.RAW, height=120)
-    assert isinstance(raw, RawResult)
-    # At minimum the image should have non-white content
-    assert raw.width > 0 and raw.height > 0
+    html = f'<body style="margin:0"><img src="{uri}" width="100" height="100" style="display:block"></body>'
+    im = to_image(r.render(html, fmt="raw"))
+    assert is_red(im, 50, 50), "SVG circle center should be red"
+    # Outside the circle (corner) stays background, not red.
+    assert not is_red(im, 2, 2)
 
 
 def test_svg_file_uri(tmp_path: pathlib.Path) -> None:
-    """SVG loaded from a local file: URI should produce a valid image."""
-    svg_file = tmp_path / "circle.svg"
-    _ = svg_file.write_bytes(SVG_CIRCLE)
-    r = Renderer(width=200)
-    html = f'<img src="file://{svg_file}" width="100" height="100">'
-    result = r.render(html)
-    assert isinstance(result, bytes) and len(result) > 0
+    """SVG loaded from a local file resolves and renders real pixels."""
+    _ = (tmp_path / "circle.svg").write_bytes(SVG_CIRCLE)
+    page = tmp_path / "page.html"
+    page.write_text(
+        '<body style="margin:0">'
+        '<img src="circle.svg" width="100" height="100" style="display:block"></body>'
+    )
+    im = to_image(Renderer(width=200).render_file(page, fmt="raw"))
+    assert is_red(im, 50, 50), "SVG circle center should be red"
 
 
-def test_svg_no_size_attribute() -> None:
-    """SVG with no explicit pixel dimensions falls back to 512×512 by default."""
+def test_svg_viewbox_only_dimensions() -> None:
+    """An SVG with only a viewBox (no width/height) takes its size from the
+    viewBox; the blue rect must actually be drawn."""
     svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="blue"/></svg>'
     r = Renderer(width=200)
     uri = _data_uri(svg, "image/svg+xml")
-    html = f'<img src="{uri}">'
-    result = r.render(html)
-    assert isinstance(result, bytes) and len(result) > 0
+    html = f'<body style="margin:0"><img src="{uri}" style="display:block"></body>'
+    im = to_image(r.render(html, fmt="raw"))
+    px = im.getpixel((50, 50))
+    assert isinstance(px, tuple)
+    assert px[2] > 200 and px[0] < 80, f"expected blue at SVG center, got {px}"
 
 
 # ── ImageCache ownership: list-style-image goes through get_image() ──────────

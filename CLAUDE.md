@@ -38,11 +38,13 @@ Async tests need no decorators — `asyncio_mode = "auto"` in pyproject.
 - **HTTPS** is compiled in only when OpenSSL ≥ 3.0 is found (`CPPHTTPLIB_OPENSSL_SUPPORT` in
   CMakeLists). Without it, `https://` resources are silently skipped — never an error. This is
   why Linux wheels use manylinux_2_34 (OpenSSL 3) instead of 2_28 (1.1.1).
-- **SVG** decoding (`load_svg_mem`) is behind `#ifdef HAVE_LIBRSVG`, which **no build path
-  currently defines** — SVG images are silently skipped everywhere, despite the README
-  capability table claiming SVG support. The SVG tests only assert "renders without crash", so
-  they pass either way. If you touch this area: either wire librsvg into CMake/CI/vcpkg and
-  strengthen the tests to assert pixels, or remove the dead path and fix the README.
+- **SVG** is rasterized by vendored nanosvg (`src/cpp/vendor/nanosvg*.h`, stdlib-only,
+  always compiled in — no CMake/CI/vcpkg wiring needed). Coverage is the graphics subset:
+  paths/shapes/strokes/`userSpaceOnUse` gradients; NO `<text>`, filters, or
+  `objectBoundingBox` gradient coords (renders flat). Inline `<svg>` markup can never work —
+  litehtml has no SVG layout logic; it delegates all image decoding to this container.
+  SVG tests assert real pixels (`tests/test_images.py`) — keep it that way; the pre-nanosvg
+  "renders without crash" assertions hid a fully dead SVG path for months.
 
 ## Architecture
 

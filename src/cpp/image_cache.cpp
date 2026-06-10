@@ -14,13 +14,44 @@
 #include <stdexcept>
 #include <vector>
 
-#ifdef HAVE_LIBRSVG
-#include <librsvg/rsvg.h>
-#endif
+// SVG: vendored nanosvg (header-only, stdlib-only — works identically on all
+// platforms including MSVC). The implementation must live in exactly one TU.
+#define NANOSVG_IMPLEMENTATION
+#include "vendor/nanosvg.h"
+#define NANOSVGRAST_IMPLEMENTATION
+#include "vendor/nanosvgrast.h"
 
 #include "http_util.h"
 
 namespace fs = std::filesystem;
+
+// Straight-alpha RGBA (row-major, stride w*4) → new premultiplied ARGB32 cairo
+// surface, or nullptr. Shared by the WebP and SVG decode paths.
+static cairo_surface_t* surface_from_rgba(const uint8_t* rgba, int w, int h) {
+    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(surf);
+        return nullptr;
+    }
+    cairo_surface_flush(surf);
+    uint8_t* dst = cairo_image_surface_get_data(surf);
+    const size_t stride = static_cast<size_t>(cairo_image_surface_get_stride(surf));
+
+    for (int y = 0; y < h; ++y) {
+        const uint8_t* src = rgba + static_cast<size_t>(y) * w * 4;
+        uint8_t* out = dst + static_cast<size_t>(y) * stride;
+        for (int x = 0; x < w; ++x) {
+            uint8_t r = src[x*4+0], g = src[x*4+1],
+                    b = src[x*4+2], a = src[x*4+3];
+            out[x*4+0] = static_cast<uint8_t>((b * a + 127) / 255);
+            out[x*4+1] = static_cast<uint8_t>((g * a + 127) / 255);
+            out[x*4+2] = static_cast<uint8_t>((r * a + 127) / 255);
+            out[x*4+3] = a;
+        }
+    }
+    cairo_surface_mark_dirty(surf);
+    return surf;
+}
 
 ImageCache::ImageCache(Config cfg) : cfg_(std::move(cfg)) {}
 
@@ -298,87 +329,44 @@ cairo_surface_t* ImageCache::load_webp_mem(const uint8_t* data, size_t size) {
     if (!rgba) return nullptr;
     if (w <= 0 || h <= 0) { free(rgba); return nullptr; }
 
-    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-    if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
-        cairo_surface_destroy(surf);
-        free(rgba);
-        return nullptr;
-    }
-    cairo_surface_flush(surf);
-    uint8_t* dst = cairo_image_surface_get_data(surf);
-    const size_t stride = static_cast<size_t>(cairo_image_surface_get_stride(surf));
-
-    for (int y = 0; y < h; ++y) {
-        const uint8_t* src = rgba + static_cast<size_t>(y) * w * 4;
-        uint8_t* out = dst + static_cast<size_t>(y) * stride;
-        for (int x = 0; x < w; ++x) {
-            uint8_t r = src[x*4+0], g = src[x*4+1],
-                    b = src[x*4+2], a = src[x*4+3];
-            out[x*4+0] = static_cast<uint8_t>((b * a + 127) / 255);
-            out[x*4+1] = static_cast<uint8_t>((g * a + 127) / 255);
-            out[x*4+2] = static_cast<uint8_t>((r * a + 127) / 255);
-            out[x*4+3] = a;
-        }
-    }
-    cairo_surface_mark_dirty(surf);
+    cairo_surface_t* surf = surface_from_rgba(rgba, w, h);
     free(rgba);  // WebPDecodeRGBA uses malloc; free() works on all libwebp versions
     return surf;
 }
 
+// SVG via vendored nanosvg: covers the icon/graphics subset (paths, basic
+// shapes, strokes, userSpaceOnUse gradients). NOT covered: <text>, filters,
+// objectBoundingBox gradient coords. Output keeps transparency so icons
+// composite correctly over coloured page backgrounds.
 cairo_surface_t* ImageCache::load_svg_mem(const uint8_t* data, size_t size) {
-#ifdef HAVE_LIBRSVG
-    GError* err = nullptr;
-    RsvgHandle* handle = rsvg_handle_new_from_data(data, size, &err);
-    if (!handle) {
-        if (err) g_error_free(err);
-        return nullptr;
-    }
-    rsvg_handle_set_dpi(handle, 96.0);
-
-    double w = 0.0, h = 0.0;
-    if (!rsvg_handle_get_intrinsic_size_in_pixels(handle, &w, &h) || w <= 0 || h <= 0) {
-        // SVG has no intrinsic size (e.g. only viewBox with no width/height).
-        // Default to 512×512 — caller can scale later via CSS.
-        w = h = 512.0;
-    }
+    // nsvgParse mutates its input and expects NUL-terminated text.
+    std::string text(reinterpret_cast<const char*>(data), size);
+    NSVGimage* img = nsvgParse(text.data(), "px", 96.0f);
+    if (!img) return nullptr;
 
     // Decompression-bomb guard: an SVG can declare absurd dimensions (also,
-    // double→int cast is UB once w exceeds INT_MAX). Cairo caps surfaces near
-    // 32767 px per side; reject anything bigger instead of producing an error
-    // surface that would poison the page's cairo context when drawn.
-    constexpr double kMaxDim = 16384.0;
-    if (w > kMaxDim || h > kMaxDim) {
-        g_object_unref(handle);
+    // float→int cast is UB once the value exceeds INT_MAX). Reject instead of
+    // attempting a giant rasterization buffer.
+    constexpr float kMaxDim = 16384.0f;
+    const float w = img->width, h = img->height;
+    if (w <= 0.0f || h <= 0.0f || w > kMaxDim || h > kMaxDim) {
+        nsvgDelete(img);
         return nullptr;
     }
+    const int iw = static_cast<int>(std::ceil(w));
+    const int ih = static_cast<int>(std::ceil(h));
 
-    int iw = static_cast<int>(std::ceil(w));
-    int ih = static_cast<int>(std::ceil(h));
-    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, iw, ih);
-    // Same guard as the JPEG/WebP paths: never hand back an error surface.
-    if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
-        cairo_surface_destroy(surf);
-        g_object_unref(handle);
+    std::vector<uint8_t> rgba(static_cast<size_t>(iw) * ih * 4);
+    NSVGrasterizer* rast = nsvgCreateRasterizer();
+    if (!rast) {
+        nsvgDelete(img);
         return nullptr;
     }
-    cairo_t* cr = cairo_create(surf);
+    nsvgRasterize(rast, img, 0, 0, 1.0f, rgba.data(), iw, ih, iw * 4);
+    nsvgDeleteRasterizer(rast);
+    nsvgDelete(img);
 
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_paint(cr);
-
-    RsvgRectangle viewport{0.0, 0.0, static_cast<double>(iw), static_cast<double>(ih)};
-    GError* render_err = nullptr;
-    rsvg_handle_render_document(handle, cr, &viewport, &render_err);
-    if (render_err) g_error_free(render_err);
-
-    cairo_surface_flush(surf);
-    cairo_destroy(cr);
-    g_object_unref(handle);
-    return surf;
-#else
-    (void)data; (void)size;
-    return nullptr;
-#endif
+    return surface_from_rgba(rgba.data(), iw, ih);
 }
 
 cairo_surface_t* ImageCache::load_http(const std::string& url) {

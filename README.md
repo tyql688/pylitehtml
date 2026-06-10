@@ -159,7 +159,8 @@ litehtml = CSS 2.1 + 部分 CSS3。下表为**实测**结论：
 | `text-decoration`、`<mark>`/`<sub>`/`<sup>`/`<kbd>`、`white-space:pre/nowrap` | ✅ |
 | 列表（嵌套 / `list-style-type` / 任务列表）、定义列表、表格（对齐 / `:nth-child`） | ✅ |
 | `float`、`inline-block`、`position:relative/absolute`、`text-overflow:ellipsis`、`::before/::after` | ✅ |
-| 图片 `<img>`：`data:`(PNG/JPEG/WebP/SVG) / 本地 / HTTP·HTTPS、`@import` CSS | ✅ |
+| 图片 `<img>`：`data:`(PNG/JPEG/WebP) / 本地 / HTTP·HTTPS、`@import` CSS | ✅ |
+| SVG 图片（内置 nanosvg：path/形状/描边/`userSpaceOnUse` 渐变；不含 `<text>`/滤镜/内联 `<svg>` 标记） | ⚠️ 图形子集 |
 | 中文 / 多语言（内置 Noto Sans + SC，中英共享基线、子像素测量） | ✅ |
 | 多线程并发、`asyncio.to_thread` | ✅ |
 | Flexbox（简单行 / 列） | ⚠️ 部分 |
