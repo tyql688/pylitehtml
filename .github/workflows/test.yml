@@ -10,10 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      # Pin ruff so a silent upstream bump can't change format rules and break CI;
+      # keep in sync with the version used locally (uvx ruff@<version>).
       - uses: astral-sh/ruff-action@v3
-        with: { args: "check --output-format=github" }
+        with: { args: "check --output-format=github", version: "0.15.16" }
       - uses: astral-sh/ruff-action@v3
-        with: { args: "format --check" }
+        with: { args: "format --check", version: "0.15.16" }
 
   test:
     runs-on: ${{ matrix.os }}
