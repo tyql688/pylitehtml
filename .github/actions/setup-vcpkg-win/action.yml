@@ -1,0 +1,49 @@
+name: Setup vcpkg (Windows)
+description: >
+  Bootstrap vcpkg (cached on vcpkg.json), install manifest dependencies for
+  x64-windows, and export the build environment used by scikit-build-core:
+  PATH (dll bin + pkgconf), PKG_CONFIG_PATH, VCPKG_BIN and SKBUILD_CMAKE_ARGS.
+
+runs:
+  using: composite
+  steps:
+    - name: Set vcpkg path
+      run: |
+        $vcpkg = Join-Path "${{ runner.workspace }}" "b\vcpkg"
+        Add-Content $env:GITHUB_ENV "VCPKG_ROOT=$vcpkg"
+      shell: pwsh
+
+    - name: Cache vcpkg
+      id: cache-vcpkg
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.workspace }}/b/vcpkg
+        key: vcpkg-win-x64-${{ hashFiles('vcpkg.json') }}
+
+    - name: Bootstrap vcpkg
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      run: |
+        git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+        & (Join-Path "$env:VCPKG_ROOT" "bootstrap-vcpkg.bat") -disableMetrics
+      shell: pwsh
+
+    - name: Install vcpkg dependencies
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      run: |
+        $exe  = Join-Path "$env:VCPKG_ROOT" "vcpkg.exe"
+        $root = Join-Path "$env:VCPKG_ROOT" "installed"
+        & $exe install --triplet x64-windows --x-install-root $root
+      shell: pwsh
+
+    - name: Configure build environment
+      run: |
+        $installed = Join-Path "$env:VCPKG_ROOT" "installed\x64-windows"
+        $bin       = Join-Path $installed "bin"
+        $pkgconf   = Join-Path $installed "tools\pkgconf"
+        $toolchain = Join-Path "$env:VCPKG_ROOT" "scripts\buildsystems\vcpkg.cmake"
+        Add-Content $env:GITHUB_PATH $pkgconf
+        Add-Content $env:GITHUB_PATH $bin
+        Add-Content $env:GITHUB_ENV "PKG_CONFIG_PATH=$(Join-Path $installed 'lib\pkgconfig')"
+        Add-Content $env:GITHUB_ENV "VCPKG_BIN=$bin"
+        Add-Content $env:GITHUB_ENV "SKBUILD_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+      shell: pwsh

@@ -83,3 +83,34 @@ def test_flexbox() -> None:
     png = r.render(html)
     assert isinstance(png, bytes)
     assert len(png) > 0
+
+
+# ── shrink_to_fit ─────────────────────────────────────────────────────────────
+
+
+def test_shrink_to_fit_narrow_content() -> None:
+    """Content narrower than viewport should produce a narrower surface when shrink_to_fit=True."""
+    r = Renderer(width=800)
+    html = "<p style='width:100px'>Hi</p>"
+    raw_no = r.render(html, fmt=OutputFormat.RAW, shrink_to_fit=False)
+    raw_yes = r.render(html, fmt=OutputFormat.RAW, shrink_to_fit=True)
+    assert isinstance(raw_no, RawResult)
+    assert isinstance(raw_yes, RawResult)
+    assert raw_no.width == 800
+    assert raw_yes.width <= 800
+
+
+def test_shrink_to_fit_wide_content() -> None:
+    """Content filling full width should not shrink when shrink_to_fit=True."""
+    r = Renderer(width=400)
+    html = "<div style='width:400px;height:10px;background:red'></div>"
+    raw = r.render(html, fmt=OutputFormat.RAW, shrink_to_fit=True)
+    assert isinstance(raw, RawResult)
+    assert raw.width <= 400 and raw.width > 0
+
+
+def test_shrink_to_fit_false_keeps_viewport_width() -> None:
+    r = Renderer(width=800)
+    raw = r.render("<p>Hi</p>", fmt=OutputFormat.RAW, shrink_to_fit=False)
+    assert isinstance(raw, RawResult)
+    assert raw.width == 800

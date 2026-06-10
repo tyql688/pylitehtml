@@ -1,3 +1,6 @@
+import base64
+import time
+
 from pylitehtml import ImageConfig, OutputFormat, RawResult, Renderer
 
 
@@ -38,3 +41,33 @@ def test_allow_http_false_blocks_css_import() -> None:
     assert isinstance(raw, RawResult)
     # Green background from inline style should still work
     assert raw.data[1] > 200
+
+
+def test_import_css_data_uri_base64() -> None:
+    css_source = "body { background: #00ff00 !important; margin: 0; }"
+    encoded = base64.b64encode(css_source.encode()).decode()
+    uri = f"data:text/css;base64,{encoded}"
+    html = (
+        f"<html><head><style>@import url('{uri}');</style></head>"
+        "<body><div style='height:2px'></div></body></html>"
+    )
+    r = Renderer(width=100)
+    raw = r.render(html, fmt=OutputFormat.RAW, height=2)
+    assert isinstance(raw, RawResult)
+    # Green channel should be high (green background)
+    assert raw.data[1] > 200, f"G={raw.data[1]}, expected green background from CSS data URI"
+
+
+def test_css_http_timeout_respected() -> None:
+    """import_css must honour the configured timeout, not a hardcoded 5000ms.
+    A short timeout against a black-hole IP should return well under the old
+    default."""
+    r = Renderer(width=200, images=ImageConfig(timeout_ms=200))
+    html = (
+        '<html><head><base href="http://10.255.255.1/">'
+        '<link rel="stylesheet" href="x.css"></head>'
+        "<body>hi</body></html>"
+    )
+    start = time.monotonic()
+    _ = r.render(html)
+    assert time.monotonic() - start < 3.0

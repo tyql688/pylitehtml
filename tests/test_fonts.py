@@ -1,6 +1,9 @@
 import pathlib
 import shutil
 
+import pytest
+from _helpers import dark_pixels, to_image
+
 import pylitehtml
 from pylitehtml import FontConfig, OutputFormat, RawResult, Renderer
 
@@ -57,3 +60,47 @@ def test_text_decoration() -> None:
     png2 = r.render(html2)
     assert isinstance(png2, bytes)
     assert len(png2) > 0
+
+
+# ── Generic font-family aliases ───────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("family", ["sans-serif", "serif", "monospace"])
+def test_generic_font_families_render(family: str) -> None:
+    """Generic CSS families map to bundled fonts and draw real glyphs."""
+    r = Renderer(width=300)
+    html = f'<body style="margin:0;font-family:{family};font-size:40px;color:#000">Agq</body>'
+    im = to_image(r.render(html, fmt="raw"))
+    assert dark_pixels(im) > 0, f"{family}: no glyphs drawn"
+
+
+# ── Real x-height drives the `ex` unit ────────────────────────────────────────
+
+
+def test_ex_unit_scales_with_font_size() -> None:
+    """The `ex` unit is the font's x-height; a block sized in `ex` must grow
+    with font-size now that x-height is measured rather than ascent/2."""
+
+    def content_height(font_px: int) -> int:
+        html = (
+            f'<body style="margin:0"><div style="height:10ex;font-size:{font_px}px"></div></body>'
+        )
+        out = Renderer(width=100).render(html, fmt="raw")
+        return out.height  # type: ignore[union-attr]
+
+    assert content_height(40) > content_height(20)
+
+
+# ── text-decoration draws real ink ────────────────────────────────────────────
+
+
+def test_underline_adds_ink() -> None:
+    def dark(decoration: str) -> int:
+        html = (
+            '<body style="margin:0;font-size:30px;color:#000">'
+            f'<span style="text-decoration:{decoration}">WWWW</span></body>'
+        )
+        im = to_image(Renderer(width=300).render(html, fmt="raw"))
+        return dark_pixels(im)
+
+    assert dark("underline") > dark("none")
