@@ -100,10 +100,13 @@ jobs:
       - name: Build wheel and bundle DLLs with delvewheel
         run: |
           $env:PATH = "$env:VCPKG_BIN;$env:PATH"
-          pip install scikit-build-core pybind11 delvewheel pytest pillow pytest-asyncio jinja2
+          pip install scikit-build-core pybind11 delvewheel
           pip wheel . --no-build-isolation -w dist\
           delvewheel repair (Get-ChildItem dist\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName) `
             -w dist-repaired\ --add-path "$env:VCPKG_BIN"
-          pip install (Get-ChildItem dist-repaired\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName)
+          # Install the repaired wheel with the [dev] extra so test deps
+          # (pytest/pillow/numpy/pytest-asyncio) stay in sync with pyproject.toml.
+          $whl = Get-ChildItem dist-repaired\pylitehtml*.whl | Select-Object -First 1 -ExpandProperty FullName
+          pip install "$whl[dev]"
           pytest tests\ -v
         shell: pwsh
