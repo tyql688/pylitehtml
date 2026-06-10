@@ -47,11 +47,13 @@ std::vector<uint8_t> to_jpeg(cairo_surface_t* surface, int quality) {
         const uint8_t* row = src + static_cast<size_t>(y) * stride;
         uint8_t* out = rgb.data() + static_cast<size_t>(y) * rowstride;
         for (int x = 0; x < w; ++x) {
-            // Cairo ARGB32 LE: [B, G, R, A]
-            float a = row[x*4+3] / 255.0f;
-            out[x*3+0] = static_cast<uint8_t>(row[x*4+2] * a + 255.0f * (1.0f - a)); // R
-            out[x*3+1] = static_cast<uint8_t>(row[x*4+1] * a + 255.0f * (1.0f - a)); // G
-            out[x*3+2] = static_cast<uint8_t>(row[x*4+0] * a + 255.0f * (1.0f - a)); // B
+            // Cairo ARGB32 LE: [B, G, R, A], PREmultiplied alpha. Flattening a
+            // premultiplied pixel over white is exact in integers:
+            //   out = c_premult + (255 - a)   (c_premult ≤ a, so no overflow)
+            const uint8_t inv = static_cast<uint8_t>(255 - row[x*4+3]);
+            out[x*3+0] = static_cast<uint8_t>(row[x*4+2] + inv); // R
+            out[x*3+1] = static_cast<uint8_t>(row[x*4+1] + inv); // G
+            out[x*3+2] = static_cast<uint8_t>(row[x*4+0] + inv); // B
         }
     }
 
@@ -94,18 +96,19 @@ std::vector<uint8_t> to_jpeg(cairo_surface_t* surface, int quality) {
 }
 
 // ── RAW RGBA ─────────────────────────────────────────────────────────────────
-// Cairo ARGB32 LE: [B,G,R,A] per pixel → swizzle to true [R,G,B,A]
-std::vector<uint8_t> to_rgba(cairo_surface_t* surface) {
+// Cairo ARGB32 LE: [B,G,R,A] per pixel → swizzle to true [R,G,B,A].
+// Writes into a caller-provided buffer so the binding can fill a Python bytes
+// object directly instead of copying through an intermediate vector.
+void to_rgba_into(cairo_surface_t* surface, uint8_t* dst) {
     int w = cairo_image_surface_get_width(surface);
     int h = cairo_image_surface_get_height(surface);
     int stride = cairo_image_surface_get_stride(surface);
     const uint8_t* src = cairo_image_surface_get_data(surface);
 
     const size_t rowstride = static_cast<size_t>(w) * 4;
-    std::vector<uint8_t> rgba(rowstride * static_cast<size_t>(h));
     for (int y = 0; y < h; ++y) {
         const uint8_t* row = src + static_cast<size_t>(y) * stride;
-        uint8_t* out = rgba.data() + static_cast<size_t>(y) * rowstride;
+        uint8_t* out = dst + static_cast<size_t>(y) * rowstride;
         for (int x = 0; x < w; ++x) {
             out[x*4+0] = row[x*4+2]; // R
             out[x*4+1] = row[x*4+1]; // G
@@ -113,7 +116,6 @@ std::vector<uint8_t> to_rgba(cairo_surface_t* surface) {
             out[x*4+3] = row[x*4+3]; // A
         }
     }
-    return rgba;
 }
 
 } // namespace encode

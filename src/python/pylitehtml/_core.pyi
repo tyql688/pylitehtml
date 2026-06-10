@@ -26,9 +26,6 @@ class RawResult:
 class RenderError(Exception):
     """Raised when HTML rendering fails (e.g. bad structure, resource error)."""
 
-class ImageFetchError(Exception):
-    """Raised when an image cannot be fetched or decoded."""
-
 class Renderer:
     """
     Reusable HTML+CSS to image renderer.

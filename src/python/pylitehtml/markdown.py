@@ -59,6 +59,20 @@ _STRIKE = re.compile(r"~~(?=\S)(.+?)(?<=\S)~~")
 _PLACEHOLDER = "\x00{}\x00"
 _TRAILING_PUNCT = ".,;:!?"
 
+# URL scheme allowlist for [link](url) / ![img](url), following cmark's
+# `--safe` behaviour: a URL with a scheme outside the allowlist renders with an
+# empty href/src instead. (pylitehtml itself never executes JavaScript — this
+# protects users who feed markdown_to_html() output to a real browser.)
+_HAS_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
+_SAFE_SCHEME = re.compile(r"^(?:https?|mailto|ftp):", re.IGNORECASE)
+_SAFE_DATA = re.compile(r"^data:image/(?:png|gif|jpeg|webp|svg\+xml)[;,]", re.IGNORECASE)
+
+
+def _safe_url(url: str) -> str:
+    if not _HAS_SCHEME.match(url) or _SAFE_SCHEME.match(url) or _SAFE_DATA.match(url):
+        return url
+    return ""
+
 
 def _render_inline(text: str) -> str:
     """Inline markdown → HTML.
@@ -106,13 +120,13 @@ def _render_inline(text: str) -> str:
     # 4. Images → fully stashed <img> tags.
     text = _IMAGE.sub(
         lambda m: put(
-            f'<img src="{escape(m.group(2), quote=True)}" alt="{escape(m.group(1), quote=True)}">'
+            f'<img src="{escape(_safe_url(m.group(2)), quote=True)}" alt="{escape(m.group(1), quote=True)}">'
         ),
         text,
     )
     # 5. Links: stash only the href; keep the text inline for emphasis.
     text = _LINK.sub(
-        lambda m: f'<a href="{put(escape(m.group(2), quote=True))}">{m.group(1)}</a>',
+        lambda m: f'<a href="{put(escape(_safe_url(m.group(2)), quote=True))}">{m.group(1)}</a>',
         text,
     )
     # 6. Emphasis. ``***x***`` first (so its tags nest correctly), then bold
@@ -144,13 +158,18 @@ def _is_blank(line: str) -> bool:
     return not line.strip()
 
 
+# Split table rows on UNescaped pipes only; `\|` is a literal pipe inside a
+# cell (GFM). The backslash escape itself is undone later by _render_inline.
+_CELL_SPLIT = re.compile(r"(?<!\\)\|")
+
+
 def _split_table_row(line: str) -> list[str]:
     line = line.strip()
     if line.startswith("|"):
         line = line[1:]
-    if line.endswith("|"):
+    if line.endswith("|") and not line.endswith("\\|"):
         line = line[:-1]
-    return [c.strip() for c in line.split("|")]
+    return [c.strip() for c in _CELL_SPLIT.split(line)]
 
 
 def _table_aligns(delim: str) -> list[str]:
@@ -424,7 +443,15 @@ def markdown_to_png(
 ) -> bytes:
     """Render markdown to PNG/JPEG bytes — markdown → HTML → :func:`html_to_image`.
 
-    ``scale`` defaults to 2 (HiDPI). Dependency-free unless you pass ``converter``.
+    Dependency-free unless you pass ``converter``.
+
+    Defaults differ from :func:`html_to_png` ON PURPOSE — markdown output is
+    typically a document screenshot:
+
+    * ``scale=2`` — HiDPI output, crisp when shared/zoomed.
+    * ``locale="zh-CN"`` — ``lang=zh`` makes fontconfig pick Simplified-Chinese
+      glyph variants for Han characters (Han unification); harmless for
+      Latin-only text. Pass ``locale="en-US"`` etc. to override.
     """
     body = markdown_to_html(md, converter=converter)
     css = f"{DEFAULT_CSS}\n{extra_css}"
@@ -461,7 +488,10 @@ def markdown_to_image(
     fonts: FontConfig | None = None,
     images: ImageConfig | None = None,
 ) -> bytes | RawResult:
-    """Like :func:`markdown_to_png` but exposes ``fmt`` (e.g. ``"raw"``)."""
+    """Like :func:`markdown_to_png` but exposes ``fmt`` (e.g. ``"raw"``).
+
+    Shares markdown_to_png's intentional defaults (``scale=2``, ``locale="zh-CN"``).
+    """
     body = markdown_to_html(md, converter=converter)
     css = f"{DEFAULT_CSS}\n{extra_css}"
     return html_to_image(

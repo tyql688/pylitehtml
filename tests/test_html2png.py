@@ -257,3 +257,9 @@ def test_public_exports() -> None:
 def test_fmt_outputformat_enum_accepted() -> None:
     out = html_to_image("<p>x</p>", width=100, fmt=OutputFormat.PNG)
     assert isinstance(out, bytes) and out[:8] == PNG_SIG
+
+
+def test_wrap_html_escapes_title() -> None:
+    doc = wrap_html("<p>x</p>", title="</title><script>x</script>")
+    assert "<script>" not in doc
+    assert "&lt;/title&gt;" in doc

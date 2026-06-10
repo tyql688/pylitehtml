@@ -7,6 +7,7 @@
 #include <csetjmp>
 #include <cstring>
 #include <cmath>
+#include <iterator>
 #include <mutex>
 #include <filesystem>
 #include <fstream>
@@ -25,7 +26,7 @@ ImageCache::ImageCache(Config cfg) : cfg_(std::move(cfg)) {}
 
 ImageCache::~ImageCache() {
     for (auto& [key, entry] : map_) {
-        if (entry.surface) cairo_surface_destroy(entry.surface);
+        if (entry->surface) cairo_surface_destroy(entry->surface);
     }
 }
 
@@ -38,12 +39,33 @@ cairo_surface_t* ImageCache::get(const std::string& url, const std::string& base
     {
         std::shared_lock lk(mu_);
         auto it = map_.find(key);
-        if (it != map_.end()) return cairo_surface_reference(it->second.surface);
+        if (it != map_.end()) {
+            touch(*it->second);
+            return cairo_surface_reference(it->second->surface);
+        }
     }
 
-    // Slow path: load then exclusive lock
-    cairo_surface_t* surface = load(key);
-    if (!surface) return nullptr;
+    // Slow path. Deduplicate concurrent first loads: exactly one thread decodes
+    // a given key; the others wait on cv_ and pick the entry up from the map.
+    {
+        std::unique_lock lk(mu_);
+        for (;;) {
+            auto it = map_.find(key);
+            if (it != map_.end()) {
+                touch(*it->second);
+                return cairo_surface_reference(it->second->surface);
+            }
+            if (loading_.insert(key).second) break;  // we are the loader
+            cv_.wait(lk);  // another thread is decoding this key
+        }
+    }
+
+    cairo_surface_t* surface = load(key);  // no lock held while decoding
+
+    std::unique_lock lk(mu_);
+    loading_.erase(key);
+    cv_.notify_all();
+    if (!surface) return nullptr;  // load failed; waiters will retry and fail too
 
     size_t img_bytes = static_cast<size_t>(
         cairo_image_surface_get_stride(surface)) *
@@ -54,32 +76,27 @@ cairo_surface_t* ImageCache::get(const std::string& url, const std::string& base
     // caller directly without inserting.
     if (img_bytes > cfg_.max_bytes) return surface;
 
-    std::unique_lock lk(mu_);
-    // Double-check
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-        cairo_surface_destroy(surface);
-        return cairo_surface_reference(it->second.surface);
-    }
-
     evict_to_fit(img_bytes);
-    insertion_order_.push_back(key);
-    map_[key] = {surface, img_bytes};
+    map_[key] = std::make_unique<Entry>(surface, img_bytes, tick());
     used_bytes_ += img_bytes;
     // map_ holds one reference; return a second one to the caller.
     return cairo_surface_reference(surface);
 }
 
 void ImageCache::evict_to_fit(size_t needed) {
-    while (!insertion_order_.empty() && used_bytes_ + needed > cfg_.max_bytes) {
-        const std::string& victim = insertion_order_.front();
-        auto it = map_.find(victim);
-        if (it != map_.end()) {
-            if (it->second.surface) cairo_surface_destroy(it->second.surface);
-            used_bytes_ -= it->second.bytes;
-            map_.erase(it);
+    // LRU: evict the entry with the smallest last_used stamp until it fits.
+    // O(n) scan per eviction, but the map is small (tens of images) and
+    // eviction is rare relative to hits.
+    while (!map_.empty() && used_bytes_ + needed > cfg_.max_bytes) {
+        auto victim = map_.begin();
+        for (auto it = std::next(map_.begin()); it != map_.end(); ++it) {
+            if (it->second->last_used.load(std::memory_order_relaxed) <
+                victim->second->last_used.load(std::memory_order_relaxed))
+                victim = it;
         }
-        insertion_order_.pop_front();
+        if (victim->second->surface) cairo_surface_destroy(victim->second->surface);
+        used_bytes_ -= victim->second->bytes;
+        map_.erase(victim);
     }
 }
 
@@ -325,9 +342,25 @@ cairo_surface_t* ImageCache::load_svg_mem(const uint8_t* data, size_t size) {
         w = h = 512.0;
     }
 
+    // Decompression-bomb guard: an SVG can declare absurd dimensions (also,
+    // double→int cast is UB once w exceeds INT_MAX). Cairo caps surfaces near
+    // 32767 px per side; reject anything bigger instead of producing an error
+    // surface that would poison the page's cairo context when drawn.
+    constexpr double kMaxDim = 16384.0;
+    if (w > kMaxDim || h > kMaxDim) {
+        g_object_unref(handle);
+        return nullptr;
+    }
+
     int iw = static_cast<int>(std::ceil(w));
     int ih = static_cast<int>(std::ceil(h));
     cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, iw, ih);
+    // Same guard as the JPEG/WebP paths: never hand back an error surface.
+    if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(surf);
+        g_object_unref(handle);
+        return nullptr;
+    }
     cairo_t* cr = cairo_create(surf);
 
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);

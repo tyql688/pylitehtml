@@ -296,3 +296,37 @@ def test_render_file_style_full_doc_via_converter() -> None:
         converter=lambda _m: "<html><body style='background:#000'>x</body></html>",
     )
     assert out[:8] == PNG_SIG
+
+
+# ── escaped pipes in tables (GFM: \| is a literal pipe inside a cell) ─────────
+
+
+def test_table_escaped_pipe_is_literal() -> None:
+    out = M("| a \\| b | c |\n|---|---|\n| 1 | 2 |")
+    assert "<th>a | b</th>" in out
+    assert "<th>c</th>" in out
+    assert "<td>1</td>" in out and "<td>2</td>" in out
+
+
+# ── URL scheme allowlist (cmark --safe semantics) ─────────────────────────────
+
+
+def test_link_javascript_url_dropped() -> None:
+    out = M("[click](javascript:alert(1))")
+    assert "javascript:" not in out
+    assert '<a href="">' in out
+
+
+def test_image_unsafe_scheme_dropped() -> None:
+    out = M("![x](vbscript:foo)")
+    assert "vbscript:" not in out
+
+
+def test_image_data_uri_still_allowed() -> None:
+    out = M("![x](data:image/png;base64,iVBORw0KGgo=)")
+    assert 'src="data:image/png;base64,iVBORw0KGgo="' in out
+
+
+def test_link_relative_and_anchor_still_allowed() -> None:
+    assert '<a href="docs/page.html">' in M("[d](docs/page.html)")
+    assert '<a href="#sec">' in M("[s](#sec)")

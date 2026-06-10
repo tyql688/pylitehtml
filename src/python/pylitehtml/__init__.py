@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
+from html import escape as _html_escape
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,7 @@ if sys.platform == "win32":
             except OSError:
                 pass
 
-from ._core import ImageFetchError, OutputFormat, RawResult, RenderError
+from ._core import OutputFormat, RawResult, RenderError
 from ._core import Renderer as _CoreRenderer
 from ._jinja import render_template as _render_template
 
@@ -53,7 +54,6 @@ __all__ = [
     "OutputFormat",
     "RawResult",
     "RenderError",
-    "ImageFetchError",
     "Renderer",
     "render",
     "render_file",
@@ -248,8 +248,11 @@ class Renderer:
         else:
             html = resolved.read_text(encoding="utf-8")
 
-        # Inject <base> so litehtml resolves relative CSS/image paths.
-        html = f'<base href="file://{resolved.as_posix()}">\n{html}'
+        # Inject <base> so litehtml resolves relative CSS/image paths. Entity-
+        # escape the path: a quote in a directory name must not break out of
+        # the attribute (the HTML parser decodes entities, so the C++ side
+        # still receives the original path).
+        html = f'<base href="file://{_html_escape(resolved.as_posix(), quote=True)}">\n{html}'
 
         return self.render(
             html,

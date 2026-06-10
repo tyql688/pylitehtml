@@ -241,3 +241,28 @@ def test_list_style_image_no_double_free(tmp_path: pathlib.Path) -> None:
     assert all(isinstance(b, bytes) and b[:8] == b"\x89PNG\r\n\x1a\n" for b in outs)
     digests = {hashlib.md5(b).hexdigest() for b in outs if isinstance(b, bytes)}
     assert len(digests) == 1
+
+
+# ── SVG decompression-bomb guard ──────────────────────────────────────────────
+
+
+def test_svg_huge_dimensions_does_not_poison_page() -> None:
+    """An SVG declaring absurd dimensions must be skipped (loader returns
+    nothing) instead of handing an error surface to cairo — which would stop
+    ALL subsequent drawing on the page."""
+    bomb = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="1000000" height="1000000">'
+        b'<rect width="10" height="10" fill="blue"/></svg>'
+    )
+    uri = _data_uri(bomb, "image/svg+xml")
+    html = (
+        '<body style="margin:0">'
+        f'<img src="{uri}" width="10" height="10">'
+        '<div style="width:60px;height:60px;background:#f00"></div></body>'
+    )
+    raw = Renderer(width=120).render(html, fmt=OutputFormat.RAW)
+    assert isinstance(raw, RawResult)
+    # The red div below the (skipped) image must still be drawn.
+    y = raw.height - 30
+    idx = (y * raw.width + 30) * 4
+    assert raw.data[idx] > 200 and raw.data[idx + 1] < 80, "page drawing was poisoned"

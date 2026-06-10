@@ -18,6 +18,7 @@ Why not just call ``Renderer.render`` directly? Three things this adds:
 from __future__ import annotations
 
 import re
+from html import escape
 from typing import Literal
 
 from . import FontConfig, ImageConfig, OutputFormat, RawResult, Renderer
@@ -155,7 +156,7 @@ def wrap_html(
     ``em``-based, raising it scales the entire layout (used for HiDPI ``scale``).
     """
     root = f"html {{ font-size: {base_font_px}px; }}"
-    head_title = f"<title>{title}</title>" if title else ""
+    head_title = f"<title>{escape(title)}</title>" if title else ""
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         f"{head_title}<style>{root}\n{css}\n{extra_css}</style>"

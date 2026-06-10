@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <filesystem>
+#include <memory>
 #include "font_manager.h"
 #include "image_cache.h"
 #include "py_container.h"
@@ -25,8 +26,7 @@ struct RawResult {
     int height;
 };
 
-struct RenderError    : std::runtime_error { using runtime_error::runtime_error; };
-struct ImageFetchError: std::runtime_error { using runtime_error::runtime_error; };
+struct RenderError : std::runtime_error { using runtime_error::runtime_error; };
 
 class Renderer {
 public:
@@ -54,38 +54,50 @@ public:
 
     py::object render(const std::string& html,
                       int height, OutputFormat fmt, int quality, bool shrink_to_fit) {
-        // Release the GIL only for the CPU-heavy rendering work.
-        // py::bytes / py::cast must be constructed while holding the GIL.
-        std::vector<uint8_t> buf;
-        int surf_w = 0, surf_h = 0;
+        // Release the GIL for the CPU-heavy rendering work. Python objects
+        // (py::bytes / py::cast) must only be touched while holding the GIL.
+        std::unique_ptr<PyContainer> container;
         {
             py::gil_scoped_release release;
-            PyContainer container(fm_, ic_, width_, dpi_, device_height_, lang_, culture_,
-                                  ic_.allow_http());
+            container = std::make_unique<PyContainer>(
+                fm_, ic_, width_, dpi_, device_height_, lang_, culture_,
+                ic_.allow_http());
             try {
-                container.render(html, height, shrink_to_fit);
+                container->render(html, height, shrink_to_fit);
             } catch (const std::exception& e) {
                 throw RenderError(e.what());
             }
-            cairo_surface_t* surf = container.surface();
-            surf_w = cairo_image_surface_get_width(surf);
-            surf_h = cairo_image_surface_get_height(surf);
-            switch (fmt) {
-                case OutputFormat::PNG:  buf = encode::to_png(surf);           break;
-                case OutputFormat::JPEG: buf = encode::to_jpeg(surf, quality); break;
-                case OutputFormat::RAW:  buf = encode::to_rgba(surf);          break;
-            }
         }
-        // GIL re-acquired here — safe to construct Python objects
-        auto pybytes = py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+        cairo_surface_t* surf = container->surface();
+        const int surf_w = cairo_image_surface_get_width(surf);
+        const int surf_h = cairo_image_surface_get_height(surf);
+
         if (fmt == OutputFormat::RAW) {
+            // Allocate the bytes object up front (GIL held) and swizzle the
+            // pixels straight into it — skips a full-frame intermediate copy.
+            const auto nbytes = static_cast<Py_ssize_t>(
+                static_cast<size_t>(surf_w) * static_cast<size_t>(surf_h) * 4);
+            PyObject* po = PyBytes_FromStringAndSize(nullptr, nbytes);
+            if (!po) throw py::error_already_set();
+            auto pybytes = py::reinterpret_steal<py::bytes>(po);
+            {
+                py::gil_scoped_release release;
+                encode::to_rgba_into(surf, reinterpret_cast<uint8_t*>(PyBytes_AS_STRING(po)));
+            }
             RawResult r;
             r.data   = std::move(pybytes);
             r.width  = surf_w;
             r.height = surf_h;
             return py::cast(std::move(r));
         }
-        return pybytes;
+
+        std::vector<uint8_t> buf;
+        {
+            py::gil_scoped_release release;
+            buf = (fmt == OutputFormat::PNG) ? encode::to_png(surf)
+                                             : encode::to_jpeg(surf, quality);
+        }
+        return py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
     }
 
 private:
@@ -102,7 +114,6 @@ PYBIND11_MODULE(_core, m) {
     m.doc() = "pylitehtml: HTML+CSS to image renderer";
 
     py::register_exception<RenderError>(m, "RenderError");
-    py::register_exception<ImageFetchError>(m, "ImageFetchError");
 
     py::enum_<OutputFormat>(m, "OutputFormat")
         .value("PNG",  OutputFormat::PNG)

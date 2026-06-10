@@ -55,3 +55,16 @@ def test_concurrent_image_eviction_no_crash(tmp_path: pathlib.Path) -> None:
         results = list(pool.map(lambda p: r.render_file(p), work))
     assert len(results) == len(work)
     assert all(isinstance(b, bytes) and len(b) > 0 for b in results)
+
+
+def test_concurrent_first_load_same_image(tmp_path: pathlib.Path) -> None:
+    """Many threads hitting the same UNcached image: in-flight load dedup must
+    hand every caller a usable surface (one decode, no crash, no deadlock)."""
+    Image.new("RGBA", (40, 40), (255, 0, 0, 255)).save(tmp_path / "one.png")
+    page = tmp_path / "p.html"
+    page.write_text('<body style="margin:0"><img src="one.png" width="40" height="40"></body>')
+    r = Renderer(width=80)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(lambda _i: r.render_file(page), range(32)))
+    assert all(isinstance(b, bytes) and b[:8] == b"\x89PNG\r\n\x1a\n" for b in results)
+    assert len({hashlib.md5(b).hexdigest() for b in results if isinstance(b, bytes)}) == 1

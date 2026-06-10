@@ -75,3 +75,23 @@ def test_module_render_file_with_template() -> None:
     )
     assert isinstance(png, bytes)
     assert len(png) > 0
+
+
+def test_render_file_dir_with_quote_in_name(tmp_path: pathlib.Path) -> None:
+    """A quote in the directory name must not break the injected <base href>
+    attribute — relative resources should still resolve."""
+    from PIL import Image
+
+    d = tmp_path / 'has"quote'
+    d.mkdir()
+    Image.new("RGBA", (60, 60), (255, 0, 0, 255)).save(d / "pic.png")
+    page = d / "page.html"
+    page.write_text(
+        '<body style="margin:0">'
+        '<img src="pic.png" width="60" height="60" style="display:block"></body>'
+    )
+    raw = Renderer(width=120).render_file(page, fmt=OutputFormat.RAW)
+    assert isinstance(raw, RawResult)
+    # Center pixel of the 60x60 image must be red.
+    idx = (30 * raw.width + 30) * 4
+    assert raw.data[idx] > 200 and raw.data[idx + 1] < 80

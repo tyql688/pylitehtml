@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, overload
 
-from ._core import ImageFetchError as ImageFetchError
 from ._core import OutputFormat as OutputFormat
 from ._core import RawResult as RawResult
 from ._core import RenderError as RenderError
