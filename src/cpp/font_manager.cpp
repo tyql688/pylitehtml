@@ -1,5 +1,4 @@
 #include "font_manager.h"
-#include <pango/pangocairo.h>
 #include <filesystem>
 #include <stdexcept>
 

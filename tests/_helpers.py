@@ -8,15 +8,10 @@ from PIL import Image
 from pylitehtml import RawResult
 
 PNG_SIG = b"\x89PNG\r\n\x1a\n"
-JPEG_SIG = b"\xff\xd8"
 
 
 def is_png(out: bytes | RawResult) -> bool:
     return isinstance(out, bytes) and out[:8] == PNG_SIG
-
-
-def is_jpeg(out: bytes | RawResult) -> bool:
-    return isinstance(out, bytes) and out[:2] == JPEG_SIG
 
 
 def to_image(result: bytes | RawResult) -> Image.Image:

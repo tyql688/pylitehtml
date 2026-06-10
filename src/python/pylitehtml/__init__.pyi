@@ -20,7 +20,6 @@ __all__: list[str]
 
 # Internal helper (used by render_file; exposed for testing).
 def _render_template(path: Path, data: dict[str, Any]) -> str: ...
-
 @dataclass(frozen=True)
 class FontConfig:
     default: str = "Noto Sans"
