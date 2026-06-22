@@ -1,6 +1,9 @@
 """Tests for render_file: local HTML files and Jinja2 templates."""
 
 import pathlib
+import sys
+
+import pytest
 
 import pylitehtml
 from pylitehtml import OutputFormat, RawResult, Renderer
@@ -77,6 +80,11 @@ def test_module_render_file_with_template() -> None:
     assert len(png) > 0
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows filenames cannot contain '\"'; the quote-in-base-href "
+    "scenario is unreachable there.",
+)
 def test_render_file_dir_with_quote_in_name(tmp_path: pathlib.Path) -> None:
     """A quote in the directory name must not break the injected <base href>
     attribute — relative resources should still resolve."""
